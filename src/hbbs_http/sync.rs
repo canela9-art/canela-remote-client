@@ -260,6 +260,22 @@ async fn start_hbbs_sync_async() {
                                 }
                             }
                         }
+                        // CanelaRemote: contraseña de un solo uso empujada por la API.
+                        // La API la genera al abrir la sesión desde el ticket y la rota al
+                        // cerrar; así nunca vive una contraseña permanente en la BD.
+                        if let Some(canela) = rsp.remove("canela") {
+                            if let Some(pw) = canela.get("set_password").and_then(|v| v.as_str()) {
+                                // Este bucle corre en el proceso servidor (rendezvous_mediator →
+                                // sync::start), que es dueño del config: se escribe directo, sin IPC.
+                                if !pw.is_empty() {
+                                    if hbb_common::config::Config::set_permanent_password(pw) {
+                                        log::info!("canela: permanent password rotated");
+                                    } else {
+                                        log::error!("canela: set_password rejected (disable-change-permanent-password?)");
+                                    }
+                                }
+                            }
+                        }
                         if let Some(strategy) = rsp.remove("strategy") {
                             if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
                                 log::info!("strategy updated");

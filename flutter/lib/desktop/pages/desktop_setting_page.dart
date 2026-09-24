@@ -2456,7 +2456,7 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com');
+                    launchUrlString('https://github.com/canela9-art/canela-remote-client');
                   },
                   child: Text(
                     translate('Website'),

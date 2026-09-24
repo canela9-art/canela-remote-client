@@ -1,0 +1,21 @@
+# CanelaRemote — compilación manual del cliente (Actions → "CanelaRemote build" → Run workflow).
+# Reutiliza el workflow de upstream sin tocarlo, para que rebasear a un tag nuevo sea trivial.
+# Los binarios quedan como artifacts del run y en un prerelease con la etiqueta indicada.
+# Sin secretos de firma, Windows/macOS salen SIN firmar (sirven para pruebas internas).
+name: CanelaRemote build
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload-tag:
+        description: "Etiqueta del prerelease donde subir los binarios"
+        type: string
+        default: "canela-dev"
+
+jobs:
+  build:
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: ${{ inputs.upload-tag }}
