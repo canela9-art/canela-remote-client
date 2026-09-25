@@ -12,6 +12,11 @@ on:
         type: string
         default: "canela-dev"
 
+# El GITHUB_TOKEN de un fork es de solo lectura por defecto; los pasos "Publish" de
+# flutter-build.yml crean/actualizan el prerelease y necesitan escribir contenidos.
+permissions:
+  contents: write
+
 jobs:
   build:
     uses: ./.github/workflows/flutter-build.yml
