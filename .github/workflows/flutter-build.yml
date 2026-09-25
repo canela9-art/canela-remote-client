@@ -366,15 +366,26 @@ jobs:
         shell: bash
         if: env.UPLOAD_ARTIFACT == 'true' && hashFiles('canela/custom-cliente.txt') != ''
         run: |
+          # rcedit (electron/rcedit v2.0.0, hash fijo): ícono y descripción de la variante técnico
+          curl -sSL -o ./rcedit.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
+          echo "3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  ./rcedit.exe" | sha256sum -c -
           for variant in cliente tecnico; do
             rm -rf ./canela-dist && cp -r ./rustdesk ./canela-dist
             mv ./canela-dist/rustdesk.exe ./canela-dist/CanelaRemote.exe
             cp "canela/custom-$variant.txt" ./canela-dist/custom.txt
-            suffix=""; [ "$variant" = "tecnico" ] && suffix="-tecnico"
+            suffix=""
+            if [ "$variant" = "tecnico" ]; then
+              suffix="-tecnico"
+              ./rcedit.exe ./canela-dist/CanelaRemote.exe --set-icon canela/icon-tecnico.ico --set-version-string FileDescription "CanelaRemote Tecnico"
+            fi
             pushd ./libs/portable
             python3 ./generate.py -f ../../canela-dist/ -o . -e ../../canela-dist/CanelaRemote.exe
             popd
-            mv ./target/release/rustdesk-portable-packer.exe "./SignOutput/canelaremote$suffix-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+            out="./SignOutput/canelaremote$suffix-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+            mv ./target/release/rustdesk-portable-packer.exe "$out"
+            if [ "$variant" = "tecnico" ]; then
+              ./rcedit.exe "$out" --set-icon canela/icon-tecnico.ico --set-version-string FileDescription "CanelaRemote Tecnico"
+            fi
           done
           ls -la ./SignOutput
 

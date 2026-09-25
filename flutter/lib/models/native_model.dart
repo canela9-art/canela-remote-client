@@ -214,7 +214,10 @@ class PlatformFFI {
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(
         appDir: _dir,
-        customClientConfig: '',
+        // CanelaRemote: en Android no hay carpeta junto al ejecutable; la config viaja en el APK
+        customClientConfig: Platform.isAndroid
+            ? await rootBundle.loadString('assets/canela_custom.txt', cache: false).then((s) => s.trim(), onError: (_) => '')
+            : '',
       );
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');

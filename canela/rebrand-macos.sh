@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Convierte el .dmg de RustDesk en CanelaRemote con la configuración adentro.
 #   canela/rebrand-macos.sh <rustdesk.dmg> <custom.txt> <salida.dmg>
+#   Opcionales: ICON=<.icns> (ícono de la variante) VOLNAME="<nombre del volumen del dmg>"
 #
 # Por qué no es cosmético: en macOS RustDesk arma las rutas de su servicio con el nombre
 # de la app (/Applications/{APP}.app/Contents/MacOS/{APP}). Con custom.txt diciendo
@@ -35,6 +36,11 @@ $PB -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PL"
 $PB -c "Set :CFBundleURLTypes:0:CFBundleURLName $BUNDLE_ID" "$PL" 2>/dev/null || true
 $PB -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $SCHEME" "$PL"
 cp "$CUSTOM" "$APP/Contents/Resources/custom.txt"
+if [ -n "${ICON:-}" ]; then
+  ICON_FILE="$($PB -c 'Print :CFBundleIconFile' "$PL" 2>/dev/null || echo AppIcon.icns)"
+  case "$ICON_FILE" in *.icns) ;; *) ICON_FILE="$ICON_FILE.icns";; esac
+  cp "$ICON" "$APP/Contents/Resources/$ICON_FILE"
+fi
 
 # Sello ad-hoc nuevo, de adentro hacia afuera. OJO: el build sin firmar de RustDesk trae el
 # ejecutable ad-hoc CON hardened runtime y los frameworks SIN él → dyld rechaza FlutterMacOS
@@ -65,5 +71,5 @@ fi
 
 ln -s /Applications "$SRC/Applications"
 rm -f "$OUT"
-hdiutil create -volname "$APP_NAME" -srcfolder "$SRC" -format UDZO -quiet "$OUT"
+hdiutil create -volname "${VOLNAME:-$APP_NAME}" -srcfolder "$SRC" -format UDZO -quiet "$OUT"
 echo "✓ $OUT ($APP_NAME.app, $BUNDLE_ID, esquema $SCHEME://)"

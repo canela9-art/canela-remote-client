@@ -243,7 +243,7 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        FFI.startServer(configPath, "")
+        FFI.startServer(configPath, try { assets.open("flutter_assets/assets/canela_custom.txt").bufferedReader().use { it.readText().trim() } } catch (e: Exception) { "" })
 
         createForegroundNotification()
     }

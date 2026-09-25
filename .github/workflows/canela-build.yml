@@ -5,7 +5,9 @@
 # Instaladores con marca (canelaremote-*):
 #   · Windows: los arma el propio job de Windows (parche 8 en flutter-build.yml).
 #   · macOS:   job canela-macos de abajo, a partir del .dmg sin firmar de ese mismo run.
-#   · Linux / Android: siguen genéricos (rustdesk-*); se configuran con --config / código.
+#   · Android: job canela-android — mete custom.txt en el APK (parche 9 lo lee) y re-firma
+#     con la llave propia (secretos CANELA_ANDROID_KEYSTORE / _PASS).
+#   · Linux: sigue genérico (rustdesk-*); se configura con `rustdesk --config`.
 # Sin secretos de firma, Windows/macOS salen SIN firmar (sirven para pruebas internas).
 name: CanelaRemote build
 
@@ -58,7 +60,8 @@ jobs:
           for dmg in dmg-in/*.dmg; do
             case "$dmg" in *aarch64*) arch=aarch64;; *x86_64*) arch=x86_64;; *) continue;; esac
             ./canela/rebrand-macos.sh "$dmg" canela/custom-cliente.txt "out/canelaremote-$VERSION-$arch.dmg"
-            ./canela/rebrand-macos.sh "$dmg" canela/custom-tecnico.txt "out/canelaremote-tecnico-$VERSION-$arch.dmg"
+            ICON=canela/AppIcon-tecnico.icns VOLNAME="CanelaRemote Técnico" \
+              ./canela/rebrand-macos.sh "$dmg" canela/custom-tecnico.txt "out/canelaremote-tecnico-$VERSION-$arch.dmg"
           done
           ls -la out
       - name: Publicar
@@ -67,3 +70,52 @@ jobs:
           prerelease: true
           tag_name: ${{ inputs.upload-tag }}
           files: out/canelaremote*.dmg
+
+  canela-android:
+    name: CanelaRemote - apk Android (cliente y técnico)
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Rebrand y firma
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KS_B64: ${{ secrets.CANELA_ANDROID_KEYSTORE }}
+          KS_PASS: ${{ secrets.CANELA_ANDROID_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          [ -n "$KS_B64" ] || { echo "Sin llave de Android (CANELA_ANDROID_KEYSTORE): se omite."; exit 0; }
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1); echo "build-tools: $BT"
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/ks.jks"
+          mkdir -p in out
+          gh release download "${{ inputs.upload-tag }}" -R "${{ github.repository }}" \
+            -p "rustdesk-$VERSION-universal.apk" -p "rustdesk-$VERSION-aarch64.apk" -D in
+          for apk in in/*.apk; do
+            case "$apk" in *universal*) arch=universal;; *aarch64*) arch=aarch64;; *) continue;; esac
+            for variant in cliente tecnico; do
+              suffix=""; [ "$variant" = "tecnico" ] && suffix="-tecnico"
+              work="$RUNNER_TEMP/work.apk"; cp "$apk" "$work"
+              # quitar la firma v1 vieja (la v2/v3 la descarta zipalign al reescribir el archivo)
+              zip -q -d "$work" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || true
+              stage="$RUNNER_TEMP/stage"; rm -rf "$stage"; mkdir -p "$stage/assets/flutter_assets/assets"
+              cp "canela/custom-$variant.txt" "$stage/assets/flutter_assets/assets/canela_custom.txt"
+              (cd "$stage" && zip -q "$work" assets/flutter_assets/assets/canela_custom.txt)
+              # -P 16: bibliotecas nativas alineadas a 16 KB (Android 15+); -f 4 para el resto
+              "$BT/zipalign" -P 16 -f 4 "$work" "$RUNNER_TEMP/aligned.apk" || "$BT/zipalign" -p -f 4 "$work" "$RUNNER_TEMP/aligned.apk"
+              outapk="out/canelaremote$suffix-$VERSION-$arch.apk"
+              "$BT/apksigner" sign --ks "$RUNNER_TEMP/ks.jks" --ks-pass env:KS_PASS --ks-key-alias canelaremote --out "$outapk" "$RUNNER_TEMP/aligned.apk"
+              "$BT/apksigner" verify --print-certs "$outapk" | head -2
+              unzip -l "$outapk" | grep -q canela_custom.txt && echo "✓ $outapk con $variant"
+            done
+          done
+          rm -f "$RUNNER_TEMP/ks.jks"
+          ls -la out
+      - name: Publicar
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.upload-tag }}
+          files: out/canelaremote*.apk
