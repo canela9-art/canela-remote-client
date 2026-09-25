@@ -413,11 +413,14 @@ jobs:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: nightly-2023-10-13-${{ matrix.job.target }} # must use nightly here, because of abi_thiscall feature required
-          targets: ${{ matrix.job.target }}
-          components: "rustfmt"
+        shell: bash
+        run: |
+          # Backport de rustdesk master: desde rustup 1.29.1 las toolchains i686 en Windows x64
+          # requieren --force-non-host (https://github.com/rust-lang/rustup/pull/4935).
+          rustup toolchain install nightly-2023-10-13-${{ matrix.job.target }} \
+            --target ${{ matrix.job.target }} --component rustfmt \
+            --profile minimal --no-self-update --force-non-host
+          rustup default nightly-2023-10-13-${{ matrix.job.target }} --force-non-host
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
