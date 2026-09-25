@@ -359,6 +359,52 @@ jobs:
           mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
 
+      # ── CanelaRemote: instaladores con marca y configuración adentro ─────────────
+      # El nombre en ejecución sale de custom.txt; al instalar, RustDesk copia TODA la
+      # carpeta (XCOPY) y renombra el .exe a {app}.exe, así que custom.txt viaja solo.
+      - name: CanelaRemote - instaladores exe
+        shell: bash
+        if: env.UPLOAD_ARTIFACT == 'true' && hashFiles('canela/custom-cliente.txt') != ''
+        run: |
+          for variant in cliente tecnico; do
+            rm -rf ./canela-dist && cp -r ./rustdesk ./canela-dist
+            mv ./canela-dist/rustdesk.exe ./canela-dist/CanelaRemote.exe
+            cp "canela/custom-$variant.txt" ./canela-dist/custom.txt
+            suffix=""; [ "$variant" = "tecnico" ] && suffix="-tecnico"
+            pushd ./libs/portable
+            python3 ./generate.py -f ../../canela-dist/ -o . -e ../../canela-dist/CanelaRemote.exe
+            popd
+            mv ./target/release/rustdesk-portable-packer.exe "./SignOutput/canelaremote$suffix-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+          done
+          ls -la ./SignOutput
+
+      - name: CanelaRemote - msi cliente
+        if: env.UPLOAD_ARTIFACT == 'true' && hashFiles('canela/custom-cliente.txt') != ''
+        run: |
+          if (Test-Path ./canela-dist) { Remove-Item -Recurse -Force ./canela-dist }
+          Copy-Item -Recurse ./rustdesk ./canela-dist
+          Rename-Item ./canela-dist/rustdesk.exe CanelaRemote.exe
+          Copy-Item canela/custom-cliente.txt ./canela-dist/custom.txt
+          git checkout -- res/msi
+          pushd ./res/msi
+          python preprocess.py --arp -c --app-name CanelaRemote -m PixelCanela -d ../../canela-dist
+          $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
+          Get-ChildItem ./Package/bin -Recurse -Filter Package.msi | Remove-Item -Force -ErrorAction SilentlyContinue
+          msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
+          $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          mv $msi.FullName ../../SignOutput/canelaremote-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+          popd
+
+      - name: CanelaRemote - publicar
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        if: env.UPLOAD_ARTIFACT == 'true' && hashFiles('canela/custom-cliente.txt') != ''
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./SignOutput/canelaremote*.exe
+            ./SignOutput/canelaremote*.msi
+
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
         shell: bash

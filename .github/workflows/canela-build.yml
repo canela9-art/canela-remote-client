@@ -1,6 +1,11 @@
 # CanelaRemote — compilación manual del cliente (Actions → "CanelaRemote build" → Run workflow).
 # Reutiliza el workflow de upstream sin tocarlo, para que rebasear a un tag nuevo sea trivial.
 # Los binarios quedan como artifacts del run y en un prerelease con la etiqueta indicada.
+#
+# Instaladores con marca (canelaremote-*):
+#   · Windows: los arma el propio job de Windows (parche 8 en flutter-build.yml).
+#   · macOS:   job canela-macos de abajo, a partir del .dmg sin firmar de ese mismo run.
+#   · Linux / Android: siguen genéricos (rustdesk-*); se configuran con --config / código.
 # Sin secretos de firma, Windows/macOS salen SIN firmar (sirven para pruebas internas).
 name: CanelaRemote build
 
@@ -24,3 +29,41 @@ jobs:
     with:
       upload-artifact: true
       upload-tag: ${{ inputs.upload-tag }}
+
+  canela-macos:
+    name: CanelaRemote - dmg macOS (cliente y técnico)
+    needs: build
+    # corre aunque falle algún job ajeno (p. ej. Flatpak por red); si falta un dmg, lo salta
+    if: ${{ !cancelled() }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: rustdesk-unsigned-macos-aarch64
+          path: ./dmg-in
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: rustdesk-unsigned-macos-x86_64
+          path: ./dmg-in
+      - name: Rebrand
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          mkdir -p out
+          shopt -s nullglob
+          for dmg in dmg-in/*.dmg; do
+            case "$dmg" in *aarch64*) arch=aarch64;; *x86_64*) arch=x86_64;; *) continue;; esac
+            ./canela/rebrand-macos.sh "$dmg" canela/custom-cliente.txt "out/canelaremote-$VERSION-$arch.dmg"
+            ./canela/rebrand-macos.sh "$dmg" canela/custom-tecnico.txt "out/canelaremote-tecnico-$VERSION-$arch.dmg"
+          done
+          ls -la out
+      - name: Publicar
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.upload-tag }}
+          files: out/canelaremote*.dmg
