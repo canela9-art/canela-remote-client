@@ -45,9 +45,17 @@ jobs:
         run: |
           git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
 
+      - name: CanelaRemote - checkout (pantalla del modo privado)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: canela-src
+          sparse-checkout: canela
+
       - name: Build the project
         run: |
           cd RustDeskTempTopMostWindow && git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          # CanelaRemote: nuestra pantalla del modo privado en vez de la de RustDesk
+          if (Test-Path ../canela-src/canela/privacy-screen.png) { python ../canela-src/canela/png2imgcpp.py ../canela-src/canela/privacy-screen.png WindowInjection/img.cpp; if ($LASTEXITCODE) { exit 1 } }
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
