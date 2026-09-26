@@ -7,6 +7,7 @@
 #   · macOS:   job canela-macos de abajo, a partir del .dmg sin firmar de ese mismo run.
 #   · Android: job canela-android — mete custom.txt en el APK (parche 9 lo lee) y re-firma
 #     con la llave propia (secretos CANELA_ANDROID_KEYSTORE / _PASS).
+#   · Prueba: canela-windows-smoke abre los .exe x86_64 publicados y exige la ventana.
 #   · Linux: sigue genérico (rustdesk-*); se configura con `rustdesk --config`.
 # Sin secretos de firma, Windows/macOS salen SIN firmar (sirven para pruebas internas).
 name: CanelaRemote build
@@ -119,3 +120,12 @@ jobs:
           prerelease: true
           tag_name: ${{ inputs.upload-tag }}
           files: out/canelaremote*.apk
+
+  # Abre los .exe de Windows ya publicados y falla si alguno no muestra la ventana.
+  canela-windows-smoke:
+    name: CanelaRemote - prueba Windows
+    needs: build
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/canela-smoke-windows.yml
+    with:
+      tag: ${{ inputs.upload-tag }}

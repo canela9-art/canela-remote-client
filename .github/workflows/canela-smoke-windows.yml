@@ -1,57 +1,56 @@
-# Prueba de humo: baja un instalador de Windows publicado, lo abre como lo haría un usuario
-# (doble clic, sin argumentos) y reporta procesos, carpetas extraídas y logs.
+# Prueba de humo de los instaladores de Windows publicados: abre cada .exe como lo haría un
+# usuario (doble clic, sin argumentos) y exige que la ventana "CanelaRemote" siga abierta a
+# los 45 s. Corre sola al final de "CanelaRemote build" y también a mano (Run workflow).
 name: CanelaRemote - prueba Windows
 
 on:
   workflow_dispatch:
     inputs:
-      asset:
-        description: "Archivo del release (ej. canelaremote-1.4.9-x86_64.exe)"
-        default: canelaremote-1.4.9-x86_64.exe
+      pattern:
+        description: "Archivos del release a probar (glob)"
+        default: "canelaremote*-x86_64.exe"
       tag:
         default: canela-dev
-      runner:
-        default: windows-2022
+  workflow_call:
+    inputs:
+      pattern:
+        type: string
+        default: "canelaremote*-x86_64.exe"
+      tag:
+        type: string
+        default: canela-dev
 
 permissions:
   contents: read
 
 jobs:
   smoke:
-    runs-on: ${{ inputs.runner }}
+    runs-on: windows-2022
     steps:
       - name: Descargar
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "${{ inputs.asset }}" -D "$env:USERPROFILE\Downloads"
-          Get-ChildItem "$env:USERPROFILE\Downloads"
-      - name: Abrir como usuario (doble clic)
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "${{ inputs.pattern }}" -D C:\dl
+          Get-ChildItem C:\dl
+      - name: Abrir como usuario
         shell: pwsh
         run: |
-          $exe = Join-Path "$env:USERPROFILE\Downloads" "${{ inputs.asset }}"
-          $p = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 45
-          "--- packer sigue vivo: $(-not $p.HasExited)  exit=$($p.ExitCode)"
-          "--- procesos"
-          Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' } | Format-Table Id, Name, Path, MainWindowTitle -AutoSize | Out-String -Width 300
-          "--- carpetas extraídas"
-          foreach ($d in "$env:LOCALAPPDATA\rustdesk", "$env:LOCALAPPDATA\canelaremote") { if (Test-Path $d) { Get-ChildItem $d | Select-Object -First 40 | Format-Table Name, Length | Out-String } }
-          "--- config y logs"
-          foreach ($d in "$env:APPDATA\CanelaRemote", "$env:APPDATA\RustDesk") {
-            if (Test-Path $d) {
-              Get-ChildItem -Recurse $d | Format-Table FullName, Length | Out-String -Width 300
-              Get-ChildItem -Recurse "$d\log" -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
+          $failed = @()
+          foreach ($f in Get-ChildItem C:\dl -Filter *.exe) {
+            Remove-Item -Recurse -Force "$env:LOCALAPPDATA\rustdesk", "$env:APPDATA\CanelaRemote" -ErrorAction SilentlyContinue
+            Start-Process $f.FullName | Out-Null
+            Start-Sleep -Seconds 45
+            $procs = Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' }
+            $win = $procs | Where-Object { $_.MainWindowTitle -like 'CanelaRemote*' }
+            "=== $($f.Name): ventana=$([bool]$win)"
+            $procs | Format-Table Id, Name, MainWindowTitle -AutoSize | Out-String -Width 200
+            if (-not $win) {
+              $failed += $f.Name
+              Get-ChildItem "$env:APPDATA\CanelaRemote\log" -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.FullName)"; Get-Content $_.FullName -Tail 40 }
             }
+            $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
           }
-          "--- eventos de aplicación (errores recientes)"
-          Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=(Get-Date).AddMinutes(-3)} -ErrorAction SilentlyContinue | Format-List TimeCreated, ProviderName, Message | Out-String -Width 300
-      - name: Ejecutar directo desde la carpeta extraída
-        shell: pwsh
-        run: |
-          $e = Get-ChildItem "$env:LOCALAPPDATA\rustdesk" -Filter *.exe -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'canela|rustdesk' } | Select-Object -First 1
-          if (-not $e) { "no hay exe extraído"; exit 0 }
-          "exe: $($e.FullName)"
-          & $e.FullName --version 2>&1 | Out-String
-          "exit=$LASTEXITCODE"
+          if ($failed.Count) { Write-Error "No abrieron: $($failed -join ', ')"; exit 1 }

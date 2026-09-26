@@ -371,6 +371,9 @@ jobs:
           echo "3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a  ./rcedit.exe" | sha256sum -c -
           for variant in cliente tecnico; do
             rm -rf ./canela-dist && cp -r ./rustdesk ./canela-dist
+            # Sin impresora remota: printer_driver_adapter.dll cierra el proceso (código 3) cuando el
+            # app-name no es RustDesk. Tampoco se instala el driver "RustDesk Printer" en el cliente.
+            rm -rf ./canela-dist/printer_driver_adapter.dll ./canela-dist/drivers/RustDeskPrinterDriver
             mv ./canela-dist/rustdesk.exe ./canela-dist/CanelaRemote.exe
             cp "canela/custom-$variant.txt" ./canela-dist/custom.txt
             suffix=""
@@ -394,6 +397,8 @@ jobs:
         run: |
           if (Test-Path ./canela-dist) { Remove-Item -Recurse -Force ./canela-dist }
           Copy-Item -Recurse ./rustdesk ./canela-dist
+          # Sin impresora remota (ver el paso de los .exe)
+          Remove-Item -Recurse -Force ./canela-dist/printer_driver_adapter.dll, ./canela-dist/drivers/RustDeskPrinterDriver -ErrorAction SilentlyContinue
           Rename-Item ./canela-dist/rustdesk.exe CanelaRemote.exe
           Copy-Item canela/custom-cliente.txt ./canela-dist/custom.txt
           git checkout -- res/msi
