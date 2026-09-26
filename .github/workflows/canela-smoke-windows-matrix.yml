@@ -1,0 +1,55 @@
+# Diagnóstico: aísla si el cierre al abrir viene del nombre del .exe o del custom.txt.
+name: CanelaRemote - diagnóstico Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset:
+        default: canelaremote-1.4.9-x86_64.exe
+      tag:
+        default: canela-dev
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: windows-2022
+    steps:
+      - name: Diagnóstico
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "${{ inputs.asset }}" -D C:\dl
+          Start-Process "C:\dl\${{ inputs.asset }}" -ArgumentList "--version" -Wait
+          Start-Sleep 5
+          Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' } | Stop-Process -Force -ErrorAction SilentlyContinue
+          $src = "$env:LOCALAPPDATA\rustdesk"
+          "custom.txt:"; Get-Content "$src\custom.txt"
+          function Try-Variant($name, $exe, $withCustom) {
+            $d = "C:\t\$name"
+            Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue
+            Copy-Item -Recurse $src $d
+            Remove-Item "$d\meta.toml" -ErrorAction SilentlyContinue
+            if ($exe -ne 'CanelaRemote.exe') { Rename-Item "$d\CanelaRemote.exe" $exe }
+            if (-not $withCustom) { Remove-Item "$d\custom.txt" }
+            Remove-Item -Recurse -Force "$env:APPDATA\CanelaRemote", "$env:APPDATA\RustDesk" -ErrorAction SilentlyContinue
+            $p = Start-Process "$d\$exe" -PassThru -RedirectStandardOutput "$d\out.txt" -RedirectStandardError "$d\err.txt"
+            Start-Sleep 30
+            $procs = Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' }
+            "=== $name  exe=$exe custom=$withCustom  alive=$(-not $p.HasExited) exit=$($p.ExitCode)"
+            $procs | Format-Table Id, Name, MainWindowTitle -AutoSize | Out-String -Width 200
+            "stdout:"; Get-Content "$d\out.txt" -ErrorAction SilentlyContinue | Select-Object -Last 20
+            "stderr:"; Get-Content "$d\err.txt" -ErrorAction SilentlyContinue | Select-Object -Last 20
+            foreach ($l in "$env:APPDATA\CanelaRemote\log", "$env:APPDATA\RustDesk\log") {
+              Get-ChildItem $l -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "== log $($_.FullName)"; Get-Content $_.FullName -Tail 25 }
+            }
+            Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddSeconds(-40)} -ErrorAction SilentlyContinue | Where-Object { $_.LevelDisplayName -ne 'Information' } | Format-List TimeCreated, ProviderName, Message | Out-String -Width 300
+            $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep 3
+          }
+          Try-Variant a CanelaRemote.exe $true
+          Try-Variant b CanelaRemote.exe $false
+          Try-Variant c rustdesk.exe $true
+          Try-Variant d rustdesk.exe $false
