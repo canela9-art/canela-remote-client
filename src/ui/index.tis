@@ -93,7 +93,7 @@ class ConnectStatus: Reactor.Component {
     }
 
     event click $(#setup-server) () {
-        handler.open_url("https://rustdesk.com/blog/id-relay-set/");
+        handler.open_url("https://canelasoluciones.com");
     }
 }
 
@@ -601,11 +601,13 @@ class MyIdMenu: Reactor.Component {
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
-            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2026 Purslane Tech Pte. Ltd.\
-            <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
+            <div .link .custom-event url='" + handler.get_option("api-server") + "/legal/terminos'>Términos de uso</div> \
+            <div .link .custom-event url='" + handler.get_option("api-server") + "/legal/privacidad'>" + translate("Privacy Statement") + "</div> \
+            <div .link .custom-event url='https://canelasoluciones.com'>" + translate("Website") + "</div> \
+            <div .link .custom-event url='https://github.com/canela9-art/canela-remote-client'>Código fuente (AGPL-3.0)</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>&copy; 2026 Canela Soluciones SRL &middot; RNC 131394282\
+            <br />Basado en RustDesk &copy; Purslane Tech Pte. Ltd. &middot; AGPL-3.0<br />" + handler.get_license() + " \
+            <p style='font-weight: bold'>Soporte técnico remoto de Canela Soluciones</p>\
             </div>\
         </div>", "", function(el) {
             if (el && el.attributes) {
@@ -834,10 +836,10 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.open_url("https://rustdesk.com/download");
+        handler.open_url(handler.get_option("api-server") + "/descargar");
         return;
         if (!is_win) {
-            handler.open_url("https://rustdesk.com");
+            handler.open_url("https://canelasoluciones.com");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
@@ -1343,7 +1345,7 @@ event change $(#msgbox input[name='confirmation']) {
 $(body).content(<div style="size:*"><App /><div #msgbox /></div>);
 
 event click $(#powered-by) {
-    handler.open_url("https://rustdesk.com");
+    handler.open_url("https://canelasoluciones.com");
 }
 
 event click $(#open-settings) (_, me) {

@@ -403,8 +403,9 @@ jobs:
           Rename-Item ./canela-dist/rustdesk.exe CanelaRemote.exe
           Copy-Item canela/custom-cliente.txt ./canela-dist/custom.txt
           git checkout -- res/msi
+          Copy-Item canela/License.rtf res/msi/Package/License.rtf   # términos de Canela Soluciones (legal/build.py)
           pushd ./res/msi
-          python preprocess.py --arp -c --app-name CanelaRemote -m PixelCanela -d ../../canela-dist
+          python preprocess.py --arp -c --app-name CanelaRemote -m "Canela Soluciones SRL" -d ../../canela-dist
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           Get-ChildItem ./Package/bin -Recurse -Filter Package.msi | Remove-Item -Force -ErrorAction SilentlyContinue
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
@@ -591,7 +592,7 @@ jobs:
             cp "canela/custom-$variant.txt" ./canela-dist/custom.txt
             suffix=""; desc="CanelaRemote - soporte remoto"; icon=""
             if [ "$variant" = "tecnico" ]; then suffix="-tecnico"; desc="CanelaRemote Tecnico"; icon="--set-icon canela/icon-tecnico.ico"; fi
-            meta=(--set-version-string ProductName CanelaRemote --set-version-string CompanyName PixelCanela --set-version-string FileDescription "$desc")
+            meta=(--set-version-string ProductName CanelaRemote --set-version-string CompanyName "Canela Soluciones SRL" --set-version-string FileDescription "$desc")
             ./rcedit.exe ./canela-dist/CanelaRemote.exe $icon "${meta[@]}"
             pushd ./libs/portable
             python3 ./generate.py -f ../../canela-dist/ -o . -e ../../canela-dist/CanelaRemote.exe

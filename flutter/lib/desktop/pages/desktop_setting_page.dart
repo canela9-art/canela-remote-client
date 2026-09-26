@@ -2447,9 +2447,18 @@ class _AboutState extends State<_About> {
                 SelectionArea(
                     child: Text('${translate('Fingerprint')}: $fingerprint')
                         .marginSymmetric(vertical: 4.0)),
+              // CanelaRemote: textos legales propios + crédito AGPL a RustDesk
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
+                    launchUrlString('${bind.mainGetOptionSync(key: 'api-server')}/legal/terminos');
+                  },
+                  child: Text(
+                    'Términos de uso',
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
+                    launchUrlString('${bind.mainGetOptionSync(key: 'api-server')}/legal/privacidad');
                   },
                   child: Text(
                     translate('Privacy Statement'),
@@ -2457,10 +2466,18 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://github.com/canela9-art/canela-remote-client');
+                    launchUrlString('https://canelasoluciones.com');
                   },
                   child: Text(
                     translate('Website'),
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
+                    launchUrlString('https://github.com/canela9-art/canela-remote-client');
+                  },
+                  child: Text(
+                    'Código fuente (AGPL-3.0)',
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
@@ -2475,11 +2492,11 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
+                            '© ${DateTime.now().toString().substring(0, 4)} Canela Soluciones SRL · RNC 131394282\nBasado en RustDesk © Purslane Tech Pte. Ltd. · AGPL-3.0${license.isEmpty ? '' : '\n$license'}',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
-                            translate('Slogan_tip'),
+                            'Soporte técnico remoto de Canela Soluciones',
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: Colors.white),

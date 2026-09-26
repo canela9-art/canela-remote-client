@@ -492,6 +492,8 @@ def init_global_vars(dist_dir, app_name, args):
 
 
 def update_license_file(app_name):
+    # CanelaRemote: Package/License.rtf ya es el texto propio (canela/License.rtf); no tocar
+    return
     if app_name == "RustDesk":
         return
     license_file = Path(sys.argv[0]).parent.joinpath("Package/License.rtf")

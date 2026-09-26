@@ -14,6 +14,7 @@ lazy_static::lazy_static! {
     static ref CURRENT_2FA: Mutex<Option<(TOTPInfo, TOTP)>> = Mutex::new(None);
 }
 
+#[allow(dead_code)]
 const ISSUER: &str = "RustDesk";
 const TAG_LOGIN: &str = "Connection";
 
@@ -33,7 +34,7 @@ impl TOTPInfo {
             1,
             30,
             self.secret.clone(),
-            Some(format!("{} {}", ISSUER, TAG_LOGIN)),
+            Some(format!("{} {}", crate::get_app_name(), TAG_LOGIN)),  // CanelaRemote: emisor = nombre de la app
             self.name.clone(),
         )?;
         Ok(totp)
