@@ -1,0 +1,57 @@
+# Prueba de humo: baja un instalador de Windows publicado, lo abre como lo haría un usuario
+# (doble clic, sin argumentos) y reporta procesos, carpetas extraídas y logs.
+name: CanelaRemote - prueba Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset:
+        description: "Archivo del release (ej. canelaremote-1.4.9-x86_64.exe)"
+        default: canelaremote-1.4.9-x86_64.exe
+      tag:
+        default: canela-dev
+      runner:
+        default: windows-2022
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Descargar
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "${{ inputs.asset }}" -D "$env:USERPROFILE\Downloads"
+          Get-ChildItem "$env:USERPROFILE\Downloads"
+      - name: Abrir como usuario (doble clic)
+        shell: pwsh
+        run: |
+          $exe = Join-Path "$env:USERPROFILE\Downloads" "${{ inputs.asset }}"
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 45
+          "--- packer sigue vivo: $(-not $p.HasExited)  exit=$($p.ExitCode)"
+          "--- procesos"
+          Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' } | Format-Table Id, Name, Path, MainWindowTitle -AutoSize | Out-String -Width 300
+          "--- carpetas extraídas"
+          foreach ($d in "$env:LOCALAPPDATA\rustdesk", "$env:LOCALAPPDATA\canelaremote") { if (Test-Path $d) { Get-ChildItem $d | Select-Object -First 40 | Format-Table Name, Length | Out-String } }
+          "--- config y logs"
+          foreach ($d in "$env:APPDATA\CanelaRemote", "$env:APPDATA\RustDesk") {
+            if (Test-Path $d) {
+              Get-ChildItem -Recurse $d | Format-Table FullName, Length | Out-String -Width 300
+              Get-ChildItem -Recurse "$d\log" -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
+            }
+          }
+          "--- eventos de aplicación (errores recientes)"
+          Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=(Get-Date).AddMinutes(-3)} -ErrorAction SilentlyContinue | Format-List TimeCreated, ProviderName, Message | Out-String -Width 300
+      - name: Ejecutar directo desde la carpeta extraída
+        shell: pwsh
+        run: |
+          $e = Get-ChildItem "$env:LOCALAPPDATA\rustdesk" -Filter *.exe -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'canela|rustdesk' } | Select-Object -First 1
+          if (-not $e) { "no hay exe extraído"; exit 0 }
+          "exe: $($e.FullName)"
+          & $e.FullName --version 2>&1 | Out-String
+          "exit=$LASTEXITCODE"
