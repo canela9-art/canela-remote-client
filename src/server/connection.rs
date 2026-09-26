@@ -2528,6 +2528,14 @@ impl Connection {
                 return true;
             }
             self.reset_session_scope_for_login();
+            // CanelaRemote: solo CanelaRemote técnico con sesión (ticket firmado por la API)
+            if let Err(e) = crate::canela_ticket::verify(&lr) {
+                log::warn!("canela: login rechazado de {}: {}", lr.my_id, e);
+                self.send_login_error("Conexión no autorizada: usa CanelaRemote técnico con tu sesión iniciada")
+                    .await;
+                sleep(1.).await;
+                return false;
+            }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(

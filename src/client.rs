@@ -294,6 +294,10 @@ impl Client {
             let _ = token;
             (peer, "", key, "")
         };
+        // CanelaRemote: ticket firmado por la API para este equipo (ver canela_ticket.rs)
+        if other_server.is_empty() {
+            crate::canela_ticket::fetch(peer).await;
+        }
         let (rendezvous_server, servers, contained) = if other_server.is_empty() {
             crate::get_rendezvous_server(1_000).await
         } else {
@@ -2739,6 +2743,8 @@ impl LoginConfigHandler {
             avatar,
             ..Default::default()
         };
+        let ticket_peer = lr.username.clone();
+        crate::canela_ticket::attach(&mut lr, &ticket_peer);
         match self.conn_type {
             ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),

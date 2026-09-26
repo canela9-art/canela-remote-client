@@ -1,0 +1,14 @@
+# Prueba aislada de src/canela_ticket.rs contra el hbb_common del fork (sin compilar RustDesk
+# completo). La corre el workflow "CanelaRemote - prueba tickets".
+[package]
+name = "canela-ticket-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
+serde_json = "1"
+lazy_static = "1"
