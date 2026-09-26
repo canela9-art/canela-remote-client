@@ -3613,7 +3613,9 @@ pub fn handle_custom_client_staging_dir_before_update(
 pub fn update_to(file: &str) -> ResultType<()> {
     if file.ends_with(".exe") {
         let custom_client_staging_dir = get_custom_client_staging_dir();
-        if crate::is_custom_client() {
+        // CanelaRemote: el instalador nuevo trae su propio custom.txt (puede traer cambios de
+        // perfil); no se reusa el viejo.
+        if crate::is_custom_client() && !crate::get_app_name().eq_ignore_ascii_case("CanelaRemote") {
             handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
         } else {
             // Clean up any residual staging directory from previous custom client

@@ -101,3 +101,26 @@ jobs:
     uses: ./.github/workflows/canela-smoke-windows.yml
     with:
       tag: ${{ inputs.upload-tag }}
+
+  # Publica el número de build solo si todo salió y la prueba de Windows pasó: con eso las apps
+  # instaladas ven "Actualizar" (POST /api/canela/update lee canela-build.json del release).
+  canela-release-info:
+    name: CanelaRemote - publicar versión (actualización)
+    needs: [build, canela-macos, canela-android, canela-windows-smoke]
+    if: ${{ !cancelled() && needs.canela-windows-smoke.result == 'success' && needs.canela-macos.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: Cargo.toml
+      - name: canela-build.json
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          printf '{"build":%s,"version":"%s","sha":"%s","published_at":"%s"}\n' \
+            "${{ github.run_number }}" "$VERSION" "${{ github.sha }}" "$(date -u +%FT%TZ)" > canela-build.json
+          cat canela-build.json
+      - uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.upload-tag }}
+          files: canela-build.json

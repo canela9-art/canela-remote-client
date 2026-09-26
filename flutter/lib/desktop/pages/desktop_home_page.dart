@@ -430,14 +430,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
-    if (!bind.isCustomClient() &&
+    // CanelaRemote: la tarjeta de actualización también para nuestra app con marca
+    final isCanela = bind.mainUriPrefixSync().contains('canelaremote');
+    if ((!bind.isCustomClient() || isCanela) &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
-        bind.mainUriPrefixSync().contains('rustdesk')) {
+        (isCanela || bind.mainUriPrefixSync().contains('rustdesk'))) {
       final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
       String btnText = isToUpdate ? 'Update' : 'Download';
       GestureTapCallback onPressed = () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
+        final Uri url = Uri.parse(isCanela
+            ? '${bind.mainGetOptionSync(key: 'api-server')}/descargar'
+            : 'https://rustdesk.com/download');
         await launchUrl(url);
       };
       if (isToUpdate) {
@@ -451,7 +455,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           btnText,
           onPressed,
           closeButton: true,
-          help: isToUpdate ? 'Changelog' : null,
+          help: isToUpdate && !isCanela ? 'Changelog' : null,
           link: isToUpdate
               ? 'https://github.com/rustdesk/rustdesk/releases/tag/${bind.mainGetNewVersion()}'
               : null);

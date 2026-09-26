@@ -2855,6 +2855,10 @@ pub fn main_get_common(key: String) -> String {
             }
         } else if key.starts_with("download-file-") {
             let _version = key.replace("download-file-", "");
+            // CanelaRemote: nuestro instalador (la API lo resuelve al asset del release)
+            if crate::common::is_custom_client() {
+                return crate::canela_update::download_file();
+            }
             #[cfg(target_os = "windows")]
             return match (
                 crate::platform::windows::is_msi_installed(),
