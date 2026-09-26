@@ -1,0 +1,86 @@
+# CanelaRemote — DMG de macOS con marca (cliente y técnico) a partir del .dmg sin firmar de
+# RustDesk. Lo llama "CanelaRemote build" al final; también se corre solo (Run workflow) con el
+# run-id de un build anterior para re-firmar/re-empaquetar sin recompilar todo (~10 min).
+name: CanelaRemote - dmg macOS
+
+on:
+  workflow_call:
+    inputs:
+      upload-tag:
+        type: string
+        default: canela-dev
+      run-id:
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      upload-tag:
+        description: "Etiqueta del prerelease"
+        default: canela-dev
+      run-id:
+        description: "ID del run de 'CanelaRemote build' con los artifacts rustdesk-unsigned-macos-*"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  dmg:
+    name: dmg macOS (cliente y técnico)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: rustdesk-unsigned-macos-aarch64
+          path: ./dmg-in
+          run-id: ${{ inputs.run-id || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: rustdesk-unsigned-macos-x86_64
+          path: ./dmg-in
+          run-id: ${{ inputs.run-id || github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Certificado de firma (PixelCanela)
+        env:
+          P12: ${{ secrets.CANELA_MACOS_CERT_P12 }}
+          P12_PASS: ${{ secrets.CANELA_MACOS_CERT_PASS }}
+        run: |
+          if [ -z "$P12" ]; then echo "sin CANELA_MACOS_CERT_P12: firma ad-hoc"; exit 0; fi
+          KC="$RUNNER_TEMP/canela.keychain-db"; KCP="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KCP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          ID=$(security find-identity -p codesigning "$KC" | awk '/PixelCanela/ {print $2; exit}')
+          [ -n "$ID" ] || { security find-identity -p codesigning "$KC"; echo "no se encontró la identidad"; exit 1; }
+          echo "SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "firmando con $ID"
+      - name: Rebrand
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          mkdir -p out
+          shopt -s nullglob
+          for dmg in dmg-in/*.dmg; do
+            case "$dmg" in *aarch64*) arch=aarch64;; *x86_64*) arch=x86_64;; *) continue;; esac
+            ./canela/rebrand-macos.sh "$dmg" canela/custom-cliente.txt "out/canelaremote-$VERSION-$arch.dmg"
+            ICON=canela/AppIcon-tecnico.icns VOLNAME="CanelaRemote Técnico" \
+              ./canela/rebrand-macos.sh "$dmg" canela/custom-tecnico.txt "out/canelaremote-tecnico-$VERSION-$arch.dmg"
+          done
+          ls -la out
+      - name: Publicar
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.upload-tag }}
+          files: out/canelaremote*.dmg

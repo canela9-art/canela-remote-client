@@ -42,7 +42,15 @@ if [ -n "${ICON:-}" ]; then
   cp "$ICON" "$APP/Contents/Resources/$ICON_FILE"
 fi
 
-# Sello ad-hoc nuevo, de adentro hacia afuera. OJO: el build sin firmar de RustDesk trae el
+# Identidad de firma: SIGN_IDENTITY (certificado propio de PixelCanela, secreto del repo) o
+# ad-hoc ("-"). Con el certificado propio la firma es igual en cada versión y en cliente y
+# técnico: macOS conserva los permisos de Grabación de pantalla/Accesibilidad al actualizar
+# (con ad-hoc cada build es otro programa para TCC y hay que volver a darlos).
+SIGN="${SIGN_IDENTITY:--}"
+SIGN_OPTS=(--force --sign "$SIGN")
+[ "$SIGN" != "-" ] && SIGN_OPTS+=(--timestamp=none)
+
+# Sello nuevo, de adentro hacia afuera. OJO: el build sin firmar de RustDesk trae el
 # ejecutable ad-hoc CON hardened runtime y los frameworks SIN él → dyld rechaza FlutterMacOS
 # ("different Team IDs") y la app no abre ni siquiera la original. `codesign --force` conserva
 # esa marca, por eso primero se quita la firma de cada pieza. Firma real (Developer ID) +
@@ -51,15 +59,16 @@ for piece in "$APP"/Contents/Frameworks/*.framework "$APP"/Contents/Frameworks/*
   [ -e "$piece" ] || continue
   [ "$piece" = "$APP/Contents/MacOS/$APP_NAME" ] && continue
   codesign --remove-signature "$piece" 2>/dev/null || true
-  codesign --force --sign - "$piece"
+  codesign "${SIGN_OPTS[@]}" "$piece"
 done
 codesign --remove-signature "$APP" 2>/dev/null || true
 if [ -s "$ENT" ] && grep -q "<dict>" "$ENT"; then
-  codesign --force --sign - --entitlements "$ENT" "$APP"
+  codesign "${SIGN_OPTS[@]}" --entitlements "$ENT" "$APP"
 else
-  codesign --force --sign - "$APP"
+  codesign "${SIGN_OPTS[@]}" "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+codesign -d -r- "$APP" 2>&1 | grep -i "designated" || true
 
 # Prueba de humo: si la arquitectura coincide con la de esta máquina, la app tiene que arrancar.
 BIN="$APP/Contents/MacOS/$APP_NAME"
