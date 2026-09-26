@@ -65,8 +65,17 @@ jobs:
           $d = "C:\t\dbg"; Copy-Item -Recurse $src $d; Remove-Item "$d\meta.toml" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$env:APPDATA\CanelaRemote" -ErrorAction SilentlyContinue
           $env:_NT_SYMBOL_PATH = "srv*C:\sym*https://msdl.microsoft.com/download/symbols"
-          $cmds = 'sxe -c "kn 80; g" av; sxe -c ".echo FASTFAIL; kn 80; q" 0xc0000409; bp ntdll!NtTerminateProcess ".echo TERMINATE; ~.; kn 80; g"; bp ucrtbase!abort ".echo ABORT; kn 80; g"; bp ucrtbase!exit ".echo EXIT; kn 80; g"; bp ucrtbase!_exit ".echo _EXIT; kn 80; g"; bp ucrtbase!raise ".echo RAISE; kn 80; g"; g'
-          $p = Start-Process $cdb.FullName -ArgumentList @('-G', '-logo', 'C:\t\cdb.log', '-c', "`"$cmds`"", "$d\CanelaRemote.exe") -PassThru -NoNewWindow
+          @'
+          sxe -c "kn 80; g" av
+          sxe -c ".echo FASTFAIL; kn 80; q" 0xc0000409
+          bp ntdll!NtTerminateProcess ".echo TERMINATE; ~.; kn 80; g"
+          bu ucrtbase!abort ".echo ABORT; kn 80; g"
+          bu ucrtbase!exit ".echo EXIT; kn 80; g"
+          bu ucrtbase!_exit ".echo _EXIT; kn 80; g"
+          bu ucrtbase!raise ".echo RAISE; kn 80; g"
+          g
+          '@ | Set-Content -Encoding ascii C:\t\cmds.txt
+          $p = Start-Process $cdb.FullName -ArgumentList @('-G', '-logo', 'C:\t\cdb.log', '-cf', 'C:\t\cmds.txt', "$d\CanelaRemote.exe") -PassThru -NoNewWindow
           Start-Sleep 60
           if (-not $p.HasExited) { "cdb sigue vivo"; $p | Stop-Process -Force }
           Get-Process | Where-Object { $_.Name -match 'canela|rustdesk' } | Stop-Process -Force -ErrorAction SilentlyContinue
