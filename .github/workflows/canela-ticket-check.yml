@@ -19,5 +19,4 @@ jobs:
       - name: Probar tickets
         run: |
           cd canela/ticket-check
-          HOME_TMP=$(mktemp -d) && export HOME=$HOME_TMP   # el Config de prueba escribe en $HOME
           cargo run --quiet
