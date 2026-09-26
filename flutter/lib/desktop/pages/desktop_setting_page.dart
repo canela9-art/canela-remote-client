@@ -2437,7 +2437,8 @@ class _AboutState extends State<_About> {
                 height: 8.0,
               ),
               SelectionArea(
-                  child: Text('${translate('Version')}: $version')
+                  child: Text('${translate('Version')}: $version'
+                      '${bind.mainGetCommonSync(key: 'canela-build') != '0' ? ' (build ${bind.mainGetCommonSync(key: 'canela-build')})' : ''}')
                       .marginSymmetric(vertical: 4.0)),
               SelectionArea(
                   child: Text('${translate('Build Date')}: $buildDate')

@@ -2853,6 +2853,9 @@ pub fn main_get_common(key: String) -> String {
                     format!("error:{}", e)
                 }
             }
+        } else if key == "canela-build" {
+            // CanelaRemote: número de build (se muestra en Ajustes → Acerca de)
+            return crate::canela_update::build().to_string();
         } else if key.starts_with("download-file-") {
             let _version = key.replace("download-file-", "");
             // CanelaRemote: nuestro instalador (la API lo resuelve al asset del release)

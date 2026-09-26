@@ -12,6 +12,9 @@ on:
       run-id:
         type: string
         default: ""
+      build:
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       upload-tag:
@@ -19,6 +22,9 @@ on:
         default: canela-dev
       run-id:
         description: "ID del run de 'CanelaRemote build' con los artifacts rustdesk-unsigned-macos-*"
+        required: true
+      build:
+        description: "Número de build (run_number de ese 'CanelaRemote build'), va en el nombre del .dmg"
         required: true
 
 permissions:
@@ -69,6 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          B="${{ inputs.build }}"; [ -n "$B" ] && VERSION="$VERSION.$B"   # 1.4.9.<build>
           mkdir -p out
           shopt -s nullglob
           for dmg in dmg-in/*.dmg; do

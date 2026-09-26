@@ -385,7 +385,7 @@ jobs:
             pushd ./libs/portable
             python3 ./generate.py -f ../../canela-dist/ -o . -e ../../canela-dist/CanelaRemote.exe
             popd
-            out="./SignOutput/canelaremote$suffix-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+            out="./SignOutput/canelaremote$suffix-${{ env.VERSION }}.${{ env.CANELA_BUILD }}-${{ matrix.job.arch }}.exe"
             mv ./target/release/rustdesk-portable-packer.exe "$out"
             if [ "$variant" = "tecnico" ]; then
               ./rcedit.exe "$out" --set-icon canela/icon-tecnico.ico --set-version-string FileDescription "CanelaRemote Tecnico"
@@ -409,7 +409,7 @@ jobs:
           Get-ChildItem ./Package/bin -Recurse -Filter Package.msi | Remove-Item -Force -ErrorAction SilentlyContinue
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
-          mv $msi.FullName ../../SignOutput/canelaremote-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+          mv $msi.FullName ../../SignOutput/canelaremote-${{ env.VERSION }}.${{ env.CANELA_BUILD }}-${{ matrix.job.arch }}.msi
           popd
 
       - name: CanelaRemote - publicar
@@ -596,7 +596,7 @@ jobs:
             pushd ./libs/portable
             python3 ./generate.py -f ../../canela-dist/ -o . -e ../../canela-dist/CanelaRemote.exe
             popd
-            out="./SignOutput/canelaremote$suffix-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+            out="./SignOutput/canelaremote$suffix-${{ env.VERSION }}.${{ env.CANELA_BUILD }}-${{ matrix.job.arch }}.exe"
             mv ./target/release/rustdesk-portable-packer.exe "$out"
             ./rcedit.exe "$out" $icon "${meta[@]}"
           done

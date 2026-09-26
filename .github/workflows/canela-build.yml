@@ -43,6 +43,7 @@ jobs:
     secrets: inherit
     with:
       upload-tag: ${{ inputs.upload-tag }}
+      build: ${{ github.run_number }}
 
   canela-android:
     name: CanelaRemote - apk Android (cliente y técnico)
@@ -78,7 +79,7 @@ jobs:
               (cd "$stage" && zip -q "$work" assets/flutter_assets/assets/canela_custom.txt)
               # -P 16: bibliotecas nativas alineadas a 16 KB (Android 15+); -f 4 para el resto
               "$BT/zipalign" -P 16 -f 4 "$work" "$RUNNER_TEMP/aligned.apk" || "$BT/zipalign" -p -f 4 "$work" "$RUNNER_TEMP/aligned.apk"
-              outapk="out/canelaremote$suffix-$VERSION-$arch.apk"
+              outapk="out/canelaremote$suffix-$VERSION.${{ github.run_number }}-$arch.apk"
               "$BT/apksigner" sign --ks "$RUNNER_TEMP/ks.jks" --ks-pass env:KS_PASS --ks-key-alias canelaremote --out "$outapk" "$RUNNER_TEMP/aligned.apk"
               "$BT/apksigner" verify --print-certs "$outapk" | head -2
               unzip -l "$outapk" | grep -q canela_custom.txt && echo "✓ $outapk con $variant"
@@ -124,3 +125,12 @@ jobs:
           prerelease: true
           tag_name: ${{ inputs.upload-tag }}
           files: canela-build.json
+      - name: Borrar instaladores de builds anteriores
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # quedan solo los canelaremote-*.<este build>-*: así el panel y la actualización no ven dos
+          gh release view "${{ inputs.upload-tag }}" -R "${{ github.repository }}" --json assets --jq '.assets[].name' \
+            | grep '^canelaremote' | grep -v "\.${{ github.run_number }}-" | while read -r a; do
+                echo "borrando $a"; gh release delete-asset "${{ inputs.upload-tag }}" "$a" -R "${{ github.repository }}" -y
+              done
