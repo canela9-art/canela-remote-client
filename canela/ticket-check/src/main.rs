@@ -31,4 +31,17 @@ fn main() {
     let forged = b64(&sign::sign(serde_json::json!({"v":1,"to":me,"from":"555","exp":now+600}).to_string().as_bytes(), &sk2));
     check("firma falsa", canela_ticket::verify(&lr_with(Some(forged))), false);
     println!("OK: todos los casos");
+
+    // parche 15: la clave fija viaja con el ticket y se entrega una sola vez
+    canela_ticket::store("111222333", r#"{"ticket":"abc","exp":1,"password":"Fija-123"}"#);
+    assert_eq!(canela_ticket::take_password("111222333").as_deref(), Some("Fija-123"), "clave con el ticket");
+    assert_eq!(canela_ticket::take_password("111222333"), None, "se entrega una sola vez");
+    canela_ticket::store("111222333", r#"{"ticket":"abc","exp":1}"#);
+    assert_eq!(canela_ticket::take_password("111222333"), None, "sin clave fija no hay clave");
+    canela_ticket::store("111222333", r#"{"ticket":"abc","exp":1,"password":"Vieja"}"#);
+    canela_ticket::store("111222333", r#"{"error":"No tienes acceso a este equipo"}"#);
+    assert_eq!(canela_ticket::take_password("111222333"), None, "un pedido negado borra la clave anterior");
+    canela_ticket::store("444555666", r#"{"ticket":"abc","exp":1,"password":"Con-Servidor"}"#);
+    assert_eq!(canela_ticket::take_password("444555666@otro"), Some("Con-Servidor".into()), "id@servidor");
+    println!("clave fija     → ok (con ticket, una vez, se borra al negar)");
 }

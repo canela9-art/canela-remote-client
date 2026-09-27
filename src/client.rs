@@ -3523,6 +3523,17 @@ pub async fn handle_hash(
             lc.write().unwrap().password_source = Default::default();
         }
     }
+    // CanelaRemote: clave fija guardada en el servidor, llegó con el ticket (canela_ticket.rs)
+    if password.is_empty() {
+        let id = lc.read().unwrap().id.clone();
+        if let Some(p) = crate::canela_ticket::take_password(&id) {
+            let mut hasher = Sha256::new();
+            hasher.update(p);
+            hasher.update(&hash.salt);
+            password = hasher.finalize()[..].into();
+            lc.write().unwrap().password_source = Default::default();
+        }
+    }
     // shared password
     // Currently it's used only when click shared ab peer card
     let shared_password = lc.write().unwrap().shared_password.take();

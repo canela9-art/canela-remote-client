@@ -11,6 +11,10 @@
 //!
 //! Ticket = base64(firma ed25519 de 64 bytes ‖ JSON {"v":1,"to","from","u","exp"}), el mismo
 //! formato "combined" que usa custom.txt.
+//!
+//! Clave fija: si el equipo tiene una guardada en el servidor, la API la manda junto al ticket
+//! (`password`) y `client.rs::handle_hash` la usa sin preguntar (parche 15). Vive solo en memoria
+//! y se entrega una vez; si está vieja, el equipo la rechaza y la app pide la clave como siempre.
 
 use hbb_common::{
     config::{Config, LocalConfig},
@@ -30,6 +34,7 @@ const SKEW_SECS: i64 = 300;
 
 lazy_static::lazy_static! {
     static ref TICKETS: Mutex<HashMap<String, String>> = Default::default();
+    static ref PASSWORDS: Mutex<HashMap<String, String>> = Default::default();
 }
 
 fn now() -> i64 {
@@ -56,18 +61,35 @@ pub async fn fetch(peer: &str) {
     let body = serde_json::json!({ "id": peer, "my_id": Config::get_id() }).to_string();
     let header = format!("Authorization: Bearer {token}");
     match crate::post_request(format!("{api}/api/canela/ticket"), body, &header).await {
-        Ok(res) => match serde_json::from_str::<serde_json::Value>(&res) {
-            Ok(v) => {
-                if let Some(t) = v.get("ticket").and_then(|t| t.as_str()) {
-                    TICKETS.lock().unwrap().insert(peer.to_owned(), t.to_owned());
-                } else {
-                    log::warn!("canela: sin ticket para {peer}: {res}");
-                }
-            }
-            Err(e) => log::warn!("canela: respuesta de ticket inválida: {e}"),
-        },
+        Ok(res) => store(peer, &res),
         Err(e) => log::warn!("canela: no se pudo pedir el ticket: {e}"),
     }
+}
+
+/// Guarda lo que contestó la API para `peer`: el ticket y, si viene, la clave fija. Nunca
+/// escribe la clave en el log.
+pub fn store(peer: &str, res: &str) {
+    PASSWORDS.lock().unwrap().remove(peer);
+    match serde_json::from_str::<serde_json::Value>(res) {
+        Ok(v) => {
+            if let Some(t) = v.get("ticket").and_then(|t| t.as_str()) {
+                TICKETS.lock().unwrap().insert(peer.to_owned(), t.to_owned());
+                if let Some(p) = v.get("password").and_then(|p| p.as_str()).filter(|p| !p.is_empty()) {
+                    PASSWORDS.lock().unwrap().insert(peer.to_owned(), p.to_owned());
+                }
+            } else {
+                let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("respuesta sin ticket");
+                log::warn!("canela: sin ticket para {peer}: {err}");
+            }
+        }
+        Err(e) => log::warn!("canela: respuesta de ticket inválida: {e}"),
+    }
+}
+
+/// Lado técnico: la clave fija que mandó la API para `peer` (una sola vez).
+pub fn take_password(peer: &str) -> Option<String> {
+    let mut m = PASSWORDS.lock().unwrap();
+    m.remove(peer).or_else(|| peer.split('@').next().and_then(|id| m.remove(id)))
 }
 
 /// Lado técnico: mete el ticket (si hay) en el LoginRequest.
