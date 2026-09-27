@@ -987,6 +987,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               onPressed: (context) =>
                   launchUrlString('${bind.mainGetOptionSync(key: 'api-server')}/legal/privacidad'),
               leading: Icon(Icons.privacy_tip),
+            ),
+            SettingsTile(
+              title: Text('Licencias de terceros'),
+              onPressed: (context) =>
+                  launchUrlString('${bind.mainGetOptionSync(key: 'api-server')}/legal/licencias'),
+              leading: Icon(Icons.description_outlined),
             )
           ],
         ),

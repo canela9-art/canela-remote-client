@@ -1145,7 +1145,7 @@ impl TerminalServiceProxy {
 
         // Windows with user_token: use helper process to run shell as the logged-in user
         // This solves the ConPTY + CreateProcessAsUserW incompatibility issue where
-        // vim, Claude Code, and other TUI applications hang when ConPTY is created
+        // vim and other TUI applications hang when ConPTY is created
         // by SYSTEM service but shell runs as user via CreateProcessAsUserW.
         #[cfg(target_os = "windows")]
         if self.user_token.is_some() {
