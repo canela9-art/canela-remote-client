@@ -27,6 +27,8 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "ios")))]
 pub fn start() {
     let _sender = SENDER.lock().unwrap();
+    // CanelaRemote: reporta los puertos de las BD del equipo (canela_services.rs)
+    crate::canela_services::start();
 }
 
 #[cfg(not(target_os = "ios"))]

@@ -1,0 +1,14 @@
+# Compila y prueba los parsers de src/canela_services.rs (detección de puertos de BD) contra el
+# hbb_common del fork, sin compilar RustDesk completo. Lo corre "CanelaRemote - prueba servicios".
+[package]
+name = "canela-services-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
