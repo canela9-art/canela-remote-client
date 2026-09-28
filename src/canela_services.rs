@@ -12,6 +12,7 @@
 //! puede apagar con la opción `canela-services=N` del custom.txt.
 
 #![allow(dead_code)]
+use hbb_common::tokio; // tokio re-exportado por hbb_common (features full): para #[tokio::main]
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
