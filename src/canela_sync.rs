@@ -66,8 +66,10 @@ pub const PEER_LOCAL_FIELDS: &[&str] =
 /// Opciones secretas dentro de `options` del equipo (van cifradas en el archivo): tampoco suben.
 pub const PEER_SECRET_OPTIONS: &[&str] = &["rdp_password", "os-username", "os-password"];
 
-/// Máximo de equipos que se suben (los más recientes); la API tiene el mismo tope.
+/// Máximo de equipos que se suben (los más recientes); la API tiene el mismo tope por llamada.
 pub const MAX_PEERS: usize = 300;
+/// Tamaño de cada tanda de equipos por llamada (el servidor acepta cuerpos de hasta 100 KB).
+pub const BATCH_BYTES: usize = 60_000;
 
 // ─────────────────────────── Lógica pura (probada en CI) ───────────────────────────
 
@@ -135,6 +137,26 @@ pub fn fav_to_send(local: &[String], snap: Option<&Vec<String>>) -> (Option<Vec<
 /// Clave de una preferencia en la nube: `l:` local (LocalConfig), `d:` por defecto de sesiones.
 pub fn opt_key(kind: char, key: &str) -> String {
     format!("{kind}:{key}")
+}
+
+/// Reparte los equipos en tandas de ~`max_bytes` (siempre al menos uno por tanda).
+pub fn batches(peers: Vec<Value>, max_bytes: usize) -> Vec<Vec<Value>> {
+    let mut out: Vec<Vec<Value>> = vec![];
+    let mut cur: Vec<Value> = vec![];
+    let mut size = 0;
+    for p in peers {
+        let n = p.to_string().len();
+        if !cur.is_empty() && size + n > max_bytes {
+            out.push(std::mem::take(&mut cur));
+            size = 0;
+        }
+        size += n;
+        cur.push(p);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
 }
 
 pub fn ms(t: SystemTime) -> u64 {
@@ -347,15 +369,16 @@ pub async fn sync_once() -> ResultType<(bool, bool)> {
     }
 
     let header = format!("Authorization: Bearer {token}");
+    let mut pending = batches(peers, BATCH_BYTES).into_iter();
     let mut body = json!({
         "cursor": st.cursor,
         "fav": fav_send, "fav_mode": fav_mode,
         "opts": opts_send, "opts_mode": opts_mode,
-        "peers": peers,
+        "peers": pending.next().unwrap_or_default(),
     });
     let (mut fav_changed, mut recent_changed) = (false, false);
     let mut mtimes: HashMap<String, SystemTime> = peers_now.iter().map(|(id, t, _)| (id.clone(), *t)).collect();
-    for _page in 0..50 {
+    for _page in 0..100 {
         let text = crate::post_request(format!("{api}/api/canela/sync"), body.to_string(), &header).await?;
         let rsp: Value = serde_json::from_str(&text)?;
         if let Some(e) = rsp.get("error").and_then(|e| e.as_str()) {
@@ -397,11 +420,12 @@ pub async fn sync_once() -> ResultType<(bool, bool)> {
         if let Some(c) = rsp.get("cursor").and_then(|c| c.as_i64()) {
             st.cursor = c;
         }
-        if !rsp.get("more").and_then(|m| m.as_bool()).unwrap_or(false) {
+        let next = pending.next();
+        if next.is_none() && !rsp.get("more").and_then(|m| m.as_bool()).unwrap_or(false) {
             break;
         }
-        // páginas siguientes: solo bajar
-        body = json!({ "cursor": st.cursor, "peers": [] });
+        // llamadas siguientes: la próxima tanda de equipos (si queda) y seguir bajando
+        body = json!({ "cursor": st.cursor, "peers": next.unwrap_or_default() });
     }
     st.pushed_at = started;
     st.known = local_peers().into_iter().map(|(id, _, _)| id).collect();

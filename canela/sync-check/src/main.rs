@@ -58,6 +58,12 @@ fn main() {
     assert_eq!(fav_to_send(&fav, Some(&fav)), (None, ""));
     assert_eq!(fav_to_send(&fav, Some(&vec!["1".to_string()])), (Some(fav.clone()), "replace"));
     println!("3 bandas       → solo sube lo cambiado; la primera vez une favoritos");
+    let many: Vec<Value> = (0..50).map(|i| json!({ "id": i.to_string(), "config": { "x": "y".repeat(1000) } })).collect();
+    let b = batches(many, 10_000);
+    assert!(b.len() >= 5 && b.iter().all(|x| !x.is_empty()));
+    assert_eq!(b.iter().map(|x| x.len()).sum::<usize>(), 50);
+    assert!(batches(vec![], 10).is_empty());
+    println!("tandas         → {} llamadas para 50 equipos de ~1 KB", b.len());
 
     // ── archivos reales de equipos ──
     let mut c = PeerConfig::default();
