@@ -45,6 +45,7 @@ mod custom_server;
 mod canela_ticket;
 mod canela_update;
 mod canela_services;
+mod canela_sync;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;

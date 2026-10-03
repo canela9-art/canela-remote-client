@@ -1,0 +1,22 @@
+# Compila y prueba src/canela_sync.rs (sincronización con la cuenta) sin el build completo (~5 min).
+name: CanelaRemote - prueba sincronización
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ["src/canela_sync.rs", "canela/sync-check/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+      - name: Probar sincronización
+        run: |
+          cd canela/sync-check
+          cargo run --quiet

@@ -940,6 +940,8 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 
 pub fn check_software_update() {
     if is_custom_client() {
+        // CanelaRemote: sincronizar favoritos/recientes/preferencias con la cuenta (canela_sync.rs)
+        crate::canela_sync::start();
         // CanelaRemote: buscar versión nueva en nuestra API (canela_update.rs), no en rustdesk.com
         std::thread::spawn(|| allow_err!(crate::canela_update::check_blocking()));
         return;
