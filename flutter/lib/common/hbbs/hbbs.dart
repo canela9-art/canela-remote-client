@@ -98,7 +98,9 @@ class PeerPayload {
       'loginName': p.user_name,
       "username": p.info['username'] ?? '',
       "platform": _platform(p.info['os']),
-      "hostname": p.info['device_name'],
+      // CanelaRemote: nombre real del equipo y el que se le puso en el panel
+      "hostname": p.info['hostname'] ?? p.info['device_name'],
+      "alias": p.info['alias'] ?? '',
       "device_group_name": p.device_group_name,
       "note": p.note,
     });

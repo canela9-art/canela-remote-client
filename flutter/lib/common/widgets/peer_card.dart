@@ -188,7 +188,10 @@ class _PeerCardState extends State<_PeerCard>
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          // CanelaRemote: nombre del panel en negrita
+                          style: peer.alias.isEmpty
+                              ? Theme.of(context).textTheme.titleSmall
+                              : Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                         )),
                       ]).marginOnly(top: isPortrait ? 0 : 2),
                       Row(
@@ -200,7 +203,7 @@ class _PeerCardState extends State<_PeerCard>
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  name,
+                                  peer.alias.isEmpty ? name : '${formatID(peer.id)} · $name',
                                   style: isPortrait ? null : greyStyle,
                                   textAlign: TextAlign.start,
                                   overflow: TextOverflow.ellipsis,
@@ -313,8 +316,24 @@ class _PeerCardState extends State<_PeerCard>
                               Container(
                                 padding: const EdgeInsets.all(6),
                                 child:
-                                    getPlatformImage(peer.platform, size: 60),
+                                    getPlatformImage(peer.platform, size: peer.alias.isNotEmpty ? 44 : 60),
                               ),
+                              // CanelaRemote: el nombre que se le puso al equipo en el panel, resaltado
+                              if (peer.alias.isNotEmpty)
+                                Row(children: [
+                                  Expanded(
+                                    child: Text(
+                                      peer.alias,
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ]),
                               Row(
                                 children: [
                                   Expanded(
@@ -368,7 +387,7 @@ class _PeerCardState extends State<_PeerCard>
                         getOnline(8, peer.online),
                         Expanded(
                             child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          formatID(peer.id), // CanelaRemote: el nombre ya va arriba
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),

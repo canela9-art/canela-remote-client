@@ -92,6 +92,8 @@ class GroupModel {
     // recover online
     final oldOnlineIDs = peers.where((e) => e.online).map((e) => e.id).toList();
     peers.value = tmpPeers;
+    // CanelaRemote: el nombre puesto en el panel también en Recientes/Favoritos de aquí
+    _syncCloudAliases(tmpPeers);
     peers
         .where((e) => oldOnlineIDs.contains(e.id))
         .map((e) => e.online = true)
@@ -219,6 +221,15 @@ class GroupModel {
           '${translate('pull_group_failed_tip')}: ${translate(err.toString())}';
     }
     return false;
+  }
+
+  Future<void> _syncCloudAliases(List<Peer> list) async {
+    for (final p in list) {
+      if (p.alias.isEmpty) continue;
+      if (!await bind.mainPeerExists(id: p.id)) continue;
+      if (await bind.mainGetPeerOption(id: p.id, key: 'alias') == p.alias) continue;
+      await bind.mainSetPeerAlias(id: p.id, alias: p.alias);
+    }
   }
 
   Future<bool> _getPeers(List<Peer> tmpPeers) async {
