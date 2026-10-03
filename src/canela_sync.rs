@@ -243,15 +243,45 @@ fn set_mtime(id: &str, at_ms: u64) {
     let Some((_, _, path)) = PeerConfig::get_vec_id_modified_time_path(&Some(vec![id.to_owned()])).into_iter().next() else {
         return;
     };
-    let t = UNIX_EPOCH + Duration::from_millis(at_ms);
-    match std::fs::File::options().write(true).open(&path) {
-        Ok(f) => {
-            if let Err(e) = f.set_modified(t) {
-                log::warn!("canela_sync: fecha de {id}: {e}");
-            }
-        }
-        Err(e) => log::warn!("canela_sync: abrir {}: {e}", path.display()),
+    if let Err(e) = set_file_mtime(&path, at_ms) {
+        log::warn!("canela_sync: fecha de {id} ({}): {e}", path.display());
     }
+}
+
+/// Pone la fecha de modificación (la que ordena Recientes). `File::set_modified` no existe en el
+/// Rust 1.75 con que se compila Windows 32 bits (Sciter): se usa la API de cada sistema.
+pub fn set_file_mtime(path: &std::path::Path, at_ms: u64) -> std::io::Result<()> {
+    let f = std::fs::File::options().write(true).open(path)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        // FILETIME = intervalos de 100 ns desde 1601-01-01
+        let v = at_ms * 10_000 + 116_444_736_000_000_000;
+        let ft = winapi::shared::minwindef::FILETIME {
+            dwLowDateTime: v as u32,
+            dwHighDateTime: (v >> 32) as u32,
+        };
+        let ok = unsafe {
+            winapi::um::fileapi::SetFileTime(f.as_raw_handle() as _, std::ptr::null(), std::ptr::null(), &ft)
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(unix)]
+    {
+        use hbb_common::libc;
+        use std::os::unix::io::AsRawFd;
+        let ts = [
+            libc::timespec { tv_sec: 0, tv_nsec: libc::UTIME_OMIT },
+            libc::timespec { tv_sec: (at_ms / 1000) as libc::time_t, tv_nsec: ((at_ms % 1000) * 1_000_000) as _ },
+        ];
+        if unsafe { libc::futimens(f.as_raw_fd(), ts.as_ptr()) } != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    let _ = &f;
+    Ok(())
 }
 
 /// Aplica un equipo que vino de la nube. Devuelve true si cambió algo aquí.
