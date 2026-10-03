@@ -3,6 +3,8 @@
 // La llamada HTTP no se prueba aquí (la cubre el smoke de la API).
 #[path = "../../../src/canela_sync.rs"]
 mod canela_sync;
+#[path = "../../../src/canela_activity.rs"]
+mod canela_activity;
 pub use hbb_common::ResultType;
 pub fn get_api_server(a: String, _c: String) -> String { a }
 pub async fn post_request(_u: String, _b: String, _h: &str) -> ResultType<String> { Ok(String::new()) }
@@ -137,6 +139,35 @@ fn main() {
     let back = load_state();
     assert_eq!((back.user.as_str(), back.cursor, back.known.len()), ("tec", 42, 1));
     println!("estado         → se guarda y se lee");
+
+    // ── minutos con interacción (canela_activity.rs) ──
+    use canela_activity::Tracker;
+    let mut t = Tracker::default();
+    t.open("111222333@remoto.ufpos.com");
+    t.touch("111222333", 100);
+    t.tick(100); // minuto 100: abierto y tocado → activo
+    t.tick(101); // minuto 101: abierto sin tocar → solo conectado
+    t.touch("111222333", 102);
+    t.close("111222333", 102); // cierra en el 102 con interacción
+    t.tick(102);
+    t.tick(103); // ya cerrado: no suma
+    let rows = t.take(100);
+    assert_eq!(rows, vec![("111222333".to_string(), 100, true), ("111222333".to_string(), 101, false), ("111222333".to_string(), 102, true)], "{rows:?}");
+    assert!(t.take(100).is_empty() && t.open.is_empty());
+    // dos ventanas al mismo equipo: sigue abierto hasta cerrar las dos
+    t.open("444"); t.open("444"); t.close("444", 200); t.tick(200); t.tick(201);
+    assert!(t.take(100).iter().any(|r| r.1 == 201), "sigue abierto con una ventana");
+    t.close("444", 202); t.tick(203);
+    assert!(!t.take(100).iter().any(|r| r.1 == 203));
+    // lo que no se pudo mandar vuelve, y gana "activo"
+    t.put_back(vec![("555".into(), 300, false)]); t.put_back(vec![("555".into(), 300, true)]);
+    assert_eq!(t.take(10), vec![("555".to_string(), 300, true)]);
+    // no guarda más de 2 días sin red
+    t.put_back(vec![("555".into(), 1, false)]); t.tick(1 + canela_activity::MAX_PENDING_MINUTES + 5);
+    assert!(t.take(10).is_empty());
+    assert_eq!(canela_activity::body(&[("1".into(), 2, true)]), json!({"items":[{"peer":"1","minute":2,"active":true}]}));
+    { let _g = canela_activity::Guard::new("666"); }
+    println!("interacción     → minutos activos/conectados por equipo; reintento sin duplicar");
 
     let _ = std::fs::remove_dir_all(&tmp);
     let _ = (UNIX_EPOCH, Duration::from_secs(0), Value::Null);

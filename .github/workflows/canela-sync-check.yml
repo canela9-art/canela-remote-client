@@ -4,7 +4,7 @@ name: CanelaRemote - prueba sincronización
 on:
   workflow_dispatch:
   push:
-    paths: ["src/canela_sync.rs", "canela/sync-check/**"]
+    paths: ["src/canela_sync.rs", "src/canela_activity.rs", "canela/sync-check/**"]
 
 permissions:
   contents: read

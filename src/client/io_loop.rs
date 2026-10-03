@@ -184,6 +184,8 @@ impl<T: InvokeUiSession> Remote<T> {
                     .lock()
                     .unwrap()
                     .set_connected();
+                // CanelaRemote: sesión abierta mientras viva este bloque (canela_activity.rs)
+                let _canela_activity = crate::canela_activity::Guard::new(&self.handler.get_id());
                 let is_secured = peer.is_secured();
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
@@ -594,9 +596,20 @@ impl<T: InvokeUiSession> Remote<T> {
                     },
                     _ => {}
                 }
+                // CanelaRemote: teclado/mouse/toque/archivos = minuto con interacción
+                if matches!(
+                    &msg.union,
+                    Some(message::Union::MouseEvent(_))
+                        | Some(message::Union::KeyEvent(_))
+                        | Some(message::Union::PointerDeviceEvent(_))
+                        | Some(message::Union::FileAction(_))
+                ) {
+                    crate::canela_activity::touch(&self.handler.get_id());
+                }
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, r#type, path, to, file_num, include_hidden, is_remote)) => {
+                crate::canela_activity::touch(&self.handler.get_id());
                 log::info!("send files, is remote {}", is_remote);
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
