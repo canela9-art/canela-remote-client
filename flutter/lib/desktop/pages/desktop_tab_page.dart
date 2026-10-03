@@ -96,15 +96,30 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
             backgroundColor: Theme.of(context).colorScheme.background,
             body: DesktopTab(
               controller: tabController,
-              tail: Offstage(
-                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
-                child: ActionIcon(
-                  message: 'Settings',
-                  icon: IconFont.menu,
-                  onTap: DesktopTabPage.onAddSetting,
-                  isClose: false,
+              tail: Row(mainAxisSize: MainAxisSize.min, children: [
+                // CanelaRemote: la app de técnico se identifica en la barra de título
+                if (canelaIsTecnico())
+                  Text(
+                    'CanelaRemote · App Técnico',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.color
+                            ?.withOpacity(0.8)),
+                  ).marginOnly(right: 12),
+                Offstage(
+                  offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
+                  child: ActionIcon(
+                    message: 'Settings',
+                    icon: IconFont.menu,
+                    onTap: DesktopTabPage.onAddSetting,
+                    isClose: false,
+                  ),
                 ),
-              ),
+              ]),
             )));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget

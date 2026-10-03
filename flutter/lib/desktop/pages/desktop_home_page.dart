@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
+import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
@@ -60,7 +61,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return _buildBlock(
+    final home = _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -69,6 +70,55 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
     ));
+    // CanelaRemote: la app de técnico no se usa sin la sesión de la organización (favoritos,
+    // recientes y ajustes viven en la cuenta). Con token guardado se entra directo.
+    if (!canelaIsTecnico()) return home;
+    return Obx(() {
+      final sinSesion = gFFI.userModel.userName.value.isEmpty &&
+          bind.mainGetLocalOption(key: 'access_token').isEmpty;
+      if (!sinSesion) {
+        _canelaLoginAsked = false;
+        return home;
+      }
+      if (!_canelaLoginAsked) {
+        _canelaLoginAsked = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => loginDialog());
+      }
+      return _canelaLoginGate(context);
+    });
+  }
+
+  bool _canelaLoginAsked = false;
+
+  Widget _canelaLoginGate(BuildContext context) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            loadLogo(),
+            const SizedBox(height: 12),
+            const Text('App Técnico',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(
+              'Inicia sesión con tu usuario de la organización para usar CanelaRemote. '
+              'Tus favoritos, recientes y ajustes se guardan en tu cuenta.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).hintColor),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.login),
+              label: Text(translate('Login')),
+              onPressed: () => loginDialog(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildBlock({required Widget child}) {
@@ -147,6 +197,40 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 Expanded(child: Container())
               ],
             ),
+            // CanelaRemote: se ve que es la app de técnico y con qué usuario
+            if (canelaIsTecnico())
+              Positioned(
+                bottom: 10,
+                left: 12,
+                right: 12,
+                child: Obx(() => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A9BDC),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('App Técnico',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        if (gFFI.userModel.userName.value.isNotEmpty)
+                          Text(
+                            gFFI.userModel.accountLabelWithHandle,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).hintColor),
+                          ).marginOnly(top: 4),
+                      ],
+                    )),
+              ),
             if (isOutgoingOnly)
               Positioned(
                 bottom: 6,

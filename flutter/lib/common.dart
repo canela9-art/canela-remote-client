@@ -3035,11 +3035,17 @@ int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
+/// CanelaRemote: ¿es la app de técnico? (también las viejas sin canela-variant que no son
+/// solo-entrada, igual que canela_update.rs)
+bool canelaIsTecnico() =>
+    !bind.isIncomingOnly() &&
+    bind.mainGetOptionSync(key: 'canela-variant') != 'cliente';
+
 String getWindowName({WindowType? overrideType}) {
   final name = bind.mainGetAppNameSync();
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
-      return name;
+      return canelaIsTecnico() ? '$name · App Técnico' : name;
     case WindowType.FileTransfer:
       return "File Transfer - $name";
     case WindowType.ViewCamera:
