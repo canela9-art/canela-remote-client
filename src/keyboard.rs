@@ -614,6 +614,7 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
 /// WhatsApp). `None` = no aplica; `Some(true)` = que la capture el sistema local (equipo sin
 /// captura remota); `Some(false)` = tragarse la tecla.
 #[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn canela_print_screen(key: Key, is_press: bool) -> Option<bool> {
     if key != Key::PrintScreen || !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
         return None;
