@@ -483,6 +483,8 @@ class FfiModel with ChangeNotifier {
         _handlePrinterRequest(evt, sessionId, peerId);
       } else if (name == 'screenshot') {
         _handleScreenshot(evt, sessionId, peerId);
+      } else if (name == 'canela_print_screen') {
+        canelaPrintScreen();
       } else if (name == 'exit_relative_mouse_mode') {
         // Handle exit shortcut from rdev grab loop (Ctrl+Alt on Win/Linux, Cmd+G on macOS)
         parent.target?.inputModel.exitRelativeMouseModeWithKeyRelease();
@@ -492,11 +494,56 @@ class FfiModel with ChangeNotifier {
     };
   }
 
+  // CanelaRemote: PrintScreen dentro de la sesión copia la pantalla del cliente al
+  // portapapeles (para mandarla por WhatsApp) sin pasar por el diálogo de captura.
+  bool _canelaScreenshotToClipboard = false;
+
+  void canelaPrintScreen() {
+    if (timerScreenshot != null) return;
+    final supported = bind.sessionGetCommonSync(
+        sessionId: sessionId, key: 'is_screenshot_supported', param: '');
+    if (supported != 'true') return;
+    var display = _pi.currentDisplay;
+    if (display == kAllDisplayValue) {
+      final primary = _pi.primaryDisplay;
+      display =
+          (primary >= 0 && primary < _pi.displays.length) ? primary : 0;
+    }
+    _canelaScreenshotToClipboard = true;
+    bind.sessionTakeScreenshot(sessionId: sessionId, display: display);
+    timerScreenshot = Timer(Duration(seconds: 30), () {
+      timerScreenshot = null;
+      _canelaScreenshotToClipboard = false;
+    });
+    showToast('Tomando captura del cliente...');
+  }
+
+  Future<void> _canelaCopyScreenshot(String msg) async {
+    final dialogManager = parent.target!.dialogManager;
+    final res = msg.isNotEmpty
+        ? msg
+        : await bind.sessionHandleScreenshot(
+            sessionId: sessionId, action: '1');
+    if (res.isNotEmpty) {
+      msgBox(sessionId, 'custom-nook-nocancel-hasclose-error',
+          'Take screenshot', res, '', dialogManager);
+      return;
+    }
+    final paste = isMacOS ? 'Cmd+V' : 'Ctrl+V';
+    showToast('Captura del cliente copiada. Pégala en WhatsApp con $paste',
+        timeout: Duration(seconds: 4));
+  }
+
   _handleScreenshot(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     timerScreenshot?.cancel();
     timerScreenshot = null;
     final msg = evt['msg'] ?? '';
+    if (_canelaScreenshotToClipboard) {
+      _canelaScreenshotToClipboard = false;
+      _canelaCopyScreenshot(msg);
+      return;
+    }
     final msgBoxType = 'custom-nook-nocancel-hasclose';
     final msgBoxTitle = 'Take screenshot';
     final dialogManager = parent.target!.dialogManager;

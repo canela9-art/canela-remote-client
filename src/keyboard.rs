@@ -609,6 +609,31 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
     false
 }
 
+/// CanelaRemote: PrintScreen con el teclado dentro de la sesión no se le manda al cliente: pide
+/// la captura de su pantalla y la deja en el portapapeles del técnico (para mandarla por
+/// WhatsApp). `None` = no aplica; `Some(true)` = que la capture el sistema local (equipo sin
+/// captura remota); `Some(false)` = tragarse la tecla.
+#[cfg(feature = "flutter")]
+fn canela_print_screen(key: Key, is_press: bool) -> Option<bool> {
+    if key != Key::PrintScreen || !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+        return None;
+    }
+    let supported = flutter::get_cur_session()
+        .map(|s| s.is_screenshot_supported())
+        .unwrap_or(false);
+    if !supported {
+        return Some(true);
+    }
+    if is_press {
+        flutter::push_session_event(
+            &flutter::get_cur_session_id(),
+            "canela_print_screen",
+            vec![],
+        );
+    }
+    Some(false)
+}
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -625,6 +650,11 @@ fn start_grab_loop() {
             #[cfg(feature = "flutter")]
             if should_block_relative_mouse_shortcut(key, is_press) {
                 return None;
+            }
+
+            #[cfg(feature = "flutter")]
+            if let Some(pass) = canela_print_screen(key, is_press) {
+                return if pass { Some(event) } else { None };
             }
 
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
@@ -692,6 +722,10 @@ fn start_grab_loop() {
             } else {
                 #[cfg(feature = "flutter")]
                 if should_block_relative_mouse_shortcut(key, is_press) {
+                    return None;
+                }
+                #[cfg(feature = "flutter")]
+                if canela_print_screen(key, is_press).is_some() {
                     return None;
                 }
                 client::process_event(&get_keyboard_mode(), &event, None);

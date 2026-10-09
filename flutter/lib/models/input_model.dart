@@ -735,7 +735,20 @@ class InputModel {
     }
   }
 
+  // CanelaRemote: con la fuente de teclado de Flutter (sin el gancho de rdev), PrintScreen
+  // también trae la captura del cliente al portapapeles en vez de mandársela al cliente.
+  // Se dispara al soltarla: Windows no le entrega a la ventana el KeyDown de PrintScreen.
+  bool _canelaPrintScreen(LogicalKeyboardKey key, bool up) {
+    if (!isDesktop || !isInputSourceFlutter) return false;
+    if (key != LogicalKeyboardKey.printScreen) return false;
+    if (up) parent.target?.ffiModel.canelaPrintScreen();
+    return true;
+  }
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
+    if (_canelaPrintScreen(e.logicalKey, e is RawKeyUpEvent)) {
+      return KeyEventResult.handled;
+    }
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {
@@ -821,6 +834,9 @@ class InputModel {
   }
 
   KeyEventResult handleKeyEvent(KeyEvent e) {
+    if (_canelaPrintScreen(e.logicalKey, e is KeyUpEvent)) {
+      return KeyEventResult.handled;
+    }
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {

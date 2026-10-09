@@ -75,12 +75,27 @@ impl Screenshot {
             ScreenshotAction::CopyToClipboard => {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 {
-                    let clips = vec![Clipboard {
-                        compress: false,
-                        content: data,
-                        format: ClipboardFormat::ImagePng.into(),
-                        ..Default::default()
-                    }];
+                    // CanelaRemote: RGBA para que se copie también como bitmap de Windows
+                    // (CF_DIBV5); con solo PNG no pega en WhatsApp y otros programas.
+                    let clips = match image::load_from_memory(&data) {
+                        Ok(img) => {
+                            let rgba = img.to_rgba8();
+                            vec![Clipboard {
+                                compress: false,
+                                width: rgba.width() as _,
+                                height: rgba.height() as _,
+                                content: rgba.into_raw().into(),
+                                format: ClipboardFormat::ImageRgba.into(),
+                                ..Default::default()
+                            }]
+                        }
+                        Err(_) => vec![Clipboard {
+                            compress: false,
+                            content: data,
+                            format: ClipboardFormat::ImagePng.into(),
+                            ..Default::default()
+                        }],
+                    };
                     update_clipboard(clips, ClipboardSide::Client);
                 }
             }
