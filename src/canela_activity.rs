@@ -172,32 +172,169 @@ pub fn start() {
         std::thread::sleep(Duration::from_secs(60 - secs % 60 + 1));
         TRACKER.lock().unwrap().tick(now_min() - 1);
         flush();
+        flush_events();
     });
+}
+
+// ── Parche 26: la App Técnico es la fuente de cada soporte ──────────────────────────────────────
+// Cada conexión manda "open" al conectar y "close" al terminar (con su hora exacta) a
+// POST /api/canela/conns. Así el soporte queda registrado con su técnico aunque el equipo del cliente
+// no reporte nada (app vieja o genérica, sin internet). Lo que no se pudo mandar espera en cola, en
+// orden, y se reintenta cada minuto.
+
+/// Eventos guardados para reintentar (los más viejos se descartan primero).
+pub const MAX_PENDING_EVENTS: usize = 500;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConnEvent {
+    /// identificador de la conexión, igual en su "open" y su "close"
+    pub conn_ref: String,
+    pub peer: String,
+    /// tipo de conexión (ConnType: 0 control, 1 archivos, 4 cámara…)
+    pub kind: i32,
+    pub event: &'static str,
+    /// segundos desde 1970 (UTC)
+    pub at: i64,
+}
+
+#[derive(Default)]
+pub struct Events {
+    pub items: Vec<ConnEvent>,
+}
+
+impl Events {
+    fn trim(&mut self) {
+        if self.items.len() > MAX_PENDING_EVENTS {
+            let extra = self.items.len() - MAX_PENDING_EVENTS;
+            self.items.drain(..extra);
+        }
+    }
+
+    pub fn push(&mut self, e: ConnEvent) {
+        self.items.push(e);
+        self.trim();
+    }
+
+    pub fn take(&mut self) -> Vec<ConnEvent> {
+        std::mem::take(&mut self.items)
+    }
+
+    /// Lo que no se pudo mandar vuelve adelante, para no desordenar "open" y "close".
+    pub fn put_back(&mut self, mut rows: Vec<ConnEvent>) {
+        rows.append(&mut self.items);
+        self.items = rows;
+        self.trim();
+    }
+}
+
+pub fn events_body(rows: &[ConnEvent]) -> Value {
+    json!({ "items": rows.iter().map(|e| json!({
+        "ref": e.conn_ref, "peer": e.peer, "type": e.kind, "event": e.event, "at": e.at
+    })).collect::<Vec<_>>() })
+}
+
+hbb_common::lazy_static::lazy_static! {
+    static ref EVENTS: Mutex<Events> = Default::default();
+    /// un solo envío a la vez: los eventos llegan a la API en el orden en que pasaron
+    static ref SENDING: Mutex<()> = Mutex::new(());
+}
+static REF_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn new_conn_ref() -> String {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let seq = REF_SEQ.fetch_add(1, Ordering::SeqCst);
+    format!("{:x}{:x}{:x}", nanos, std::process::id(), seq)
+}
+
+fn now_secs() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+fn record(e: ConnEvent) {
+    if LocalConfig::get_option("access_token").is_empty() {
+        return;
+    }
+    EVENTS.lock().unwrap().push(e);
+    std::thread::spawn(flush_events);
+    start();
+}
+
+async fn send_events(rows: &[ConnEvent]) -> bool {
+    let token = LocalConfig::get_option("access_token");
+    if token.is_empty() {
+        return false;
+    }
+    let api = crate::get_api_server(Config::get_option("api-server"), Config::get_option("custom-rendezvous-server"));
+    if api.is_empty() {
+        return false;
+    }
+    let header = format!("Authorization: Bearer {token}");
+    match crate::post_request(format!("{api}/api/canela/conns"), events_body(rows).to_string(), &header).await {
+        Ok(res) => res.contains("\"ok\""),
+        Err(e) => {
+            log::debug!("canela_activity conns: {e}");
+            false
+        }
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn flush_events() {
+    let _one = SENDING.lock().unwrap();
+    let rows = EVENTS.lock().unwrap().take();
+    if rows.is_empty() {
+        return;
+    }
+    if !send_events(&rows).await {
+        EVENTS.lock().unwrap().put_back(rows);
+    }
 }
 
 /// Soportes más cortos que esto no preguntan "qué se hizo" (entrar y salir no es un soporte).
 pub const SESSION_DONE_MIN_SECS: u64 = 60;
 
 /// Marca la sesión con `peer` como abierta mientras viva; al soltarse (por donde sea que termine
-/// la sesión) la cierra. Así ninguna sesión queda "abierta para siempre" en la medición.
+/// la sesión) la cierra. Así ninguna sesión queda "abierta para siempre" en la medición. Además
+/// reporta la conexión a la API (parche 26) al abrir y al cerrar.
 pub struct Guard {
     peer: String,
     since: std::time::Instant,
+    conn_ref: String,
+    kind: i32,
 }
 
 impl Guard {
     pub fn new(peer: &str) -> Self {
+        Self::with_type(peer, 0)
+    }
+
+    pub fn with_type(peer: &str, kind: i32) -> Self {
         open(peer);
-        Guard {
+        let g = Guard {
             peer: peer.to_owned(),
             since: std::time::Instant::now(),
-        }
+            conn_ref: new_conn_ref(),
+            kind,
+        };
+        g.report("open");
+        g
+    }
+
+    fn report(&self, event: &'static str) {
+        record(ConnEvent {
+            conn_ref: self.conn_ref.clone(),
+            peer: peer_key(&self.peer),
+            kind: self.kind,
+            event,
+            at: now_secs(),
+        });
     }
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
         close(&self.peer);
+        self.report("close");
         let secs = self.since.elapsed().as_secs();
         if secs >= SESSION_DONE_MIN_SECS {
             notify_session_done(&self.peer, secs);

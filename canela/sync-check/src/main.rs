@@ -169,6 +169,27 @@ fn main() {
     { let _g = canela_activity::Guard::new("666"); }
     println!("interacción     → minutos activos/conectados por equipo; reintento sin duplicar");
 
+    // ── conexiones reportadas por la App Técnico (parche 26) ──
+    use canela_activity::{ConnEvent, Events};
+    let ev = |r: &str, e: &'static str, at: i64| ConnEvent { conn_ref: r.into(), peer: "777".into(), kind: 0, event: e, at };
+    let mut q = Events::default();
+    q.push(ev("a", "open", 1));
+    q.push(ev("a", "close", 2));
+    let sent = q.take();
+    assert!(q.items.is_empty() && sent.len() == 2);
+    q.push(ev("b", "open", 3)); // pasó mientras se mandaba lo anterior
+    q.put_back(sent); // falló: vuelve adelante, en orden
+    let order: Vec<_> = q.items.iter().map(|e| (e.conn_ref.as_str(), e.event)).collect();
+    assert_eq!(order, vec![("a", "open"), ("a", "close"), ("b", "open")], "{order:?}");
+    for i in 0..(canela_activity::MAX_PENDING_EVENTS as i64 + 10) { q.push(ev("x", "open", 100 + i)); }
+    assert_eq!(q.items.len(), canela_activity::MAX_PENDING_EVENTS);
+    assert_eq!(q.items.last().unwrap().at, 100 + canela_activity::MAX_PENDING_EVENTS as i64 + 9, "se descartan los más viejos");
+    assert_eq!(canela_activity::events_body(&[ev("c", "close", 9)]),
+        json!({"items":[{"ref":"c","peer":"777","type":0,"event":"close","at":9}]}));
+    let (r1, r2) = (canela_activity::new_conn_ref(), canela_activity::new_conn_ref());
+    assert!(r1 != r2 && r1.len() >= 6 && r1.chars().all(|c| c.is_ascii_hexdigit()), "{r1} {r2}");
+    println!("conexiones      → cola en orden, tope, cuerpo JSON y referencias únicas");
+
     let _ = std::fs::remove_dir_all(&tmp);
     let _ = (UNIX_EPOCH, Duration::from_secs(0), Value::Null);
     println!("\nTODO OK");

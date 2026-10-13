@@ -185,7 +185,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 // CanelaRemote: sesión abierta mientras viva este bloque (canela_activity.rs)
-                let _canela_activity = crate::canela_activity::Guard::new(&self.handler.get_id());
+                // parche 26: además reporta la conexión (con su tipo) a la API
+                let _canela_activity =
+                    crate::canela_activity::Guard::with_type(&self.handler.get_id(), conn_type as i32);
                 let is_secured = peer.is_secured();
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
