@@ -4,6 +4,10 @@
 // ({peer, peer_name, seconds}) cuando se cierra una sesión de más de un minuto. Aquí se muestra el
 // cuadro con los soportes predeterminados del panel (GET /api/canela/support-types) para marcar con
 // un clic y un detalle opcional, y se guarda en el soporte (POST /api/canela/session-done).
+//
+// Casos (migración 014): las conexiones del mismo técnico al mismo equipo el mismo día se juntan solas
+// en un soporte. Antes de preguntar se consulta con cuál quedó enlazada (GET /api/canela/session-case)
+// y, si ya había otras conexiones, el técnico confirma "es continuación" o dice "es un caso nuevo".
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -59,15 +63,52 @@ Future<List<_SupportType>> _loadTypes() async {
   }
 }
 
+/// Caso con el que quedó enlazada la conexión (null si no se pudo consultar).
+class _Case {
+  final int connections;
+  final String? typeId;
+  final String typeName;
+  final String resolution;
+  final DateTime? firstAt;
+  const _Case(this.connections, this.typeId, this.typeName, this.resolution, this.firstAt);
+}
+
+Future<_Case?> _loadCase(String peer) async {
+  try {
+    final uri = Uri.parse(await _api('session-case?peer=${Uri.encodeQueryComponent(peer)}'));
+    final resp = await http.get(uri, headers: getHttpHeaders());
+    if (resp.statusCode != 200) return null;
+    final c = jsonDecode(resp.body)['case'];
+    if (c is! Map) return null;
+    return _Case(
+      int.tryParse('${c['connections'] ?? 1}') ?? 1,
+      c['support_type_id'] as String?,
+      '${c['support_type_name'] ?? ''}',
+      '${c['resolution'] ?? ''}',
+      DateTime.tryParse('${c['first_at'] ?? ''}')?.toLocal(),
+    );
+  } catch (e) {
+    debugPrint('canela session_done: $e');
+    return null;
+  }
+}
+
+String _hour(DateTime? d) {
+  if (d == null) return '';
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final m = d.minute.toString().padLeft(2, '0');
+  return ' que empezó a las $h:$m ${d.hour < 12 ? 'a. m.' : 'p. m.'}';
+}
+
 /// null = guardado; si no, el mensaje de error para el técnico.
-Future<String?> _send(String peer, String? typeId, String detail) async {
+Future<String?> _send(String peer, String? typeId, String detail, bool newCase) async {
   try {
     final headers = getHttpHeaders();
     headers['Content-Type'] = 'application/json';
     final resp = await http.post(Uri.parse(await _api('session-done')),
         headers: headers,
         body: jsonEncode(
-            {'peer': peer, 'support_type_id': typeId, 'detail': detail}));
+            {'peer': peer, 'case': newCase ? 'new' : 'continue', 'support_type_id': typeId, 'detail': detail}));
     if (resp.statusCode == 200) return null;
     final msg = (jsonDecode(resp.body) as Map?)?['message'];
     return msg is String && msg.isNotEmpty
@@ -85,14 +126,23 @@ String _minutes(int secs) {
 
 Future<void> _ask(String peer, String name, int secs) async {
   final types = await _loadTypes();
+  final linked = await _loadCase(peer);
+  // ya había otras conexiones hoy a este equipo: se le enseña con cuál se enlaza
+  final linkedConns = linked?.connections ?? 1;
+  final linkedTypeId = linked?.typeId;
+  final linkedTypeName = linked?.typeName ?? '';
+  final linkedRes = linked?.resolution ?? '';
+  final isContinuation = linkedConns > 1;
   try {
     await windowManager.show();
     await windowManager.focus();
   } catch (_) {}
-  String? selected;
+  var newCase = false;
+  String? selected = isContinuation ? linkedTypeId : null;
   String? error;
   var busy = false;
-  final text = TextEditingController();
+  final text = TextEditingController(
+      text: isContinuation && linkedRes != linkedTypeName ? linkedRes : '');
   final who = name.isEmpty ? peer : '$name ($peer)';
 
   await gFFI.dialogManager.show<void>((setState, close, context) {
@@ -106,7 +156,7 @@ Future<void> _ask(String peer, String name, int secs) async {
         busy = true;
         error = null;
       });
-      final err = await _send(peer, selected, detail);
+      final err = await _send(peer, selected, detail, newCase);
       if (err == null) {
         close();
         showToast('Soporte documentado');
@@ -127,6 +177,52 @@ Future<void> _ask(String peer, String name, int secs) async {
         children: [
           Text('$who · ${_minutes(secs)}',
               style: TextStyle(color: Theme.of(context).hintColor)),
+          if (isContinuation)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hoy ya te conectaste a este equipo: se enlaza con el soporte'
+                    '${_hour(linked?.firstAt)} (${linkedConns - 1} conexión'
+                    '${linkedConns - 1 == 1 ? '' : 'es'} antes)'
+                    '${linkedTypeName.isNotEmpty ? ' · $linkedTypeName' : ''}.',
+                  ),
+                  RadioListTile<bool>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: false,
+                    groupValue: newCase,
+                    title: const Text('Es el mismo problema (continuación)'),
+                    onChanged: busy
+                        ? null
+                        : (_) => setState(() {
+                              newCase = false;
+                              selected = linkedTypeId;
+                            }),
+                  ),
+                  RadioListTile<bool>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: true,
+                    groupValue: newCase,
+                    title: const Text('Es otro problema (soporte nuevo)'),
+                    onChanged: busy
+                        ? null
+                        : (_) => setState(() {
+                              newCase = true;
+                              selected = null;
+                              text.clear();
+                            }),
+                  ),
+                ],
+              ),
+            ).marginOnly(top: 12),
           if (types.isNotEmpty)
             Wrap(
               spacing: 6,
