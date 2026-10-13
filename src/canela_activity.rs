@@ -175,19 +175,50 @@ pub fn start() {
     });
 }
 
+/// Soportes más cortos que esto no preguntan "qué se hizo" (entrar y salir no es un soporte).
+pub const SESSION_DONE_MIN_SECS: u64 = 60;
+
 /// Marca la sesión con `peer` como abierta mientras viva; al soltarse (por donde sea que termine
 /// la sesión) la cierra. Así ninguna sesión queda "abierta para siempre" en la medición.
-pub struct Guard(String);
+pub struct Guard {
+    peer: String,
+    since: std::time::Instant,
+}
 
 impl Guard {
     pub fn new(peer: &str) -> Self {
         open(peer);
-        Guard(peer.to_owned())
+        Guard {
+            peer: peer.to_owned(),
+            since: std::time::Instant::now(),
+        }
     }
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
-        close(&self.0);
+        close(&self.peer);
+        let secs = self.since.elapsed().as_secs();
+        if secs >= SESSION_DONE_MIN_SECS {
+            notify_session_done(&self.peer, secs);
+        }
     }
 }
+
+/// Parche 25: avisa a la ventana principal de la App Técnico que terminó un soporte, para que
+/// pregunte qué se hizo (flutter/lib/canela/session_done.dart → POST /api/canela/session-done).
+#[cfg(feature = "flutter")]
+fn notify_session_done(peer: &str, secs: u64) {
+    if LocalConfig::get_option("access_token").is_empty() {
+        return;
+    }
+    let id = peer_key(peer);
+    let cfg = hbb_common::config::PeerConfig::load(&id);
+    let alias = cfg.options.get("alias").cloned().unwrap_or_default();
+    let name = if alias.trim().is_empty() { cfg.info.hostname.clone() } else { alias };
+    let evt = json!({ "name": "canela_session_done", "peer": id, "peer_name": name, "seconds": secs });
+    let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt.to_string());
+}
+
+#[cfg(not(feature = "flutter"))]
+fn notify_session_done(_peer: &str, _secs: u64) {}

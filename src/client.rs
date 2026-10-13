@@ -253,7 +253,9 @@ impl Client {
         bool,
     )> {
         if config::is_incoming_only() {
-            bail!("Incoming only mode");
+            // CanelaRemote: la app de clientes (perfiles de caja/servidor) solo recibe; un técnico
+            // que la instaló por error tiene que saber qué hacer.
+            bail!("Esta es la app para clientes: solo recibe conexiones. Para dar soporte, instala la App Técnico desde el panel → Descargas → Para técnicos.");
         }
         // to-do: remember the port for each peer, so that we can retry easier
         if hbb_common::is_ip_str(peer) {
