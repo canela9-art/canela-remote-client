@@ -2165,7 +2165,9 @@ impl LoginConfigHandler {
         } else if name == "show-quality-monitor" {
             config.show_quality_monitor.v = !config.show_quality_monitor.v;
         } else if name == "allow_swap_key" {
-            config.allow_swap_key.v = !config.allow_swap_key.v;
+            // CanelaRemote: encendido por defecto; "N" = el técnico lo apagó para este equipo
+            let on = config.options.get("canela-swap-key").map(|v| v != "N").unwrap_or(true);
+            config.options.insert("canela-swap-key".to_owned(), if on { "N" } else { "Y" }.to_owned());
         } else if name == "view-only" {
             config.view_only.v = !config.view_only.v;
             let f = |b: bool| {
@@ -2376,7 +2378,7 @@ impl LoginConfigHandler {
         } else if name == "show-quality-monitor" {
             self.config.show_quality_monitor.v
         } else if name == "allow_swap_key" {
-            self.config.allow_swap_key.v
+            self.config.options.get("canela-swap-key").map(|v| v != "N").unwrap_or(true)
         } else if name == "view-only" {
             self.config.view_only.v
         } else if name == "show-my-cursor" {

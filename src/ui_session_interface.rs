@@ -697,8 +697,15 @@ impl<T: InvokeUiSession> Session<T> {
         return "".to_owned();
     }
 
+    /// CanelaRemote: el técnico usa los atajos de su sistema (Cmd en Mac, Ctrl en Windows).
+    fn canela_swap_key(&self) -> bool {
+        let peer_mac = self.peer_platform() == crate::common::PLATFORM_MACOS;
+        cfg!(target_os = "macos") != peer_mac
+            && self.get_toggle_option("allow_swap_key".to_string())
+    }
+
     pub fn swap_modifier_key(&self, msg: &mut KeyEvent) {
-        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
+        let allow_swap_key = self.canela_swap_key();
         if allow_swap_key {
             if let Some(key_event::Union::ControlKey(ck)) = msg.union {
                 let ck = ck.enum_value_or_default();
@@ -1913,7 +1920,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn swap_modifier_mouse(&self, msg: &mut hbb_common::protos::message::MouseEvent) {
-        let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
+        let allow_swap_key = self.canela_swap_key();
         if allow_swap_key {
             msg.modifiers = msg
                 .modifiers
