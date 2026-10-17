@@ -266,6 +266,10 @@ async fn start_hbbs_sync_async() {
                         // La API la genera al abrir la sesión desde el ticket y la rota al
                         // cerrar; así nunca vive una contraseña permanente en la BD.
                         if let Some(canela) = rsp.remove("canela") {
+                            // CanelaRemote: hora de la API para validar tickets (canela_ticket.rs)
+                            if let Some(t) = canela.get("now").and_then(|v| v.as_i64()) {
+                                crate::canela_ticket::set_server_time(t);
+                            }
                             if let Some(pw) = canela.get("set_password").and_then(|v| v.as_str()) {
                                 // Este bucle corre en el proceso servidor (rendezvous_mediator →
                                 // sync::start), que es dueño del config: se escribe directo, sin IPC.

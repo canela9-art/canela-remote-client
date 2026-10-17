@@ -2531,7 +2531,7 @@ impl Connection {
             // CanelaRemote: solo CanelaRemote técnico con sesión (ticket firmado por la API)
             if let Err(e) = crate::canela_ticket::verify(&lr) {
                 log::warn!("canela: login rechazado de {}: {}", lr.my_id, e);
-                self.send_login_error("Conexión no autorizada: usa CanelaRemote técnico con tu sesión iniciada")
+                self.send_login_error(format!("Conexión no autorizada: {e}"))
                     .await;
                 sleep(1.).await;
                 return false;
