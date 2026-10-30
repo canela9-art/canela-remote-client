@@ -863,7 +863,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "hide_cm" {
                     value = if crate::hbbs_http::sync::is_pro() || crate::common::is_custom_client()
                     {
-                        Some(hbb_common::password_security::hide_cm().to_string())
+                        // CanelaRemote (parche 29): o el equipo es desatendido según la API
+                        Some(
+                            (hbb_common::password_security::hide_cm()
+                                || Config::get_option("canela-hide-cm") == "Y")
+                                .to_string(),
+                        )
                     } else {
                         None
                     };

@@ -270,6 +270,13 @@ async fn start_hbbs_sync_async() {
                             if let Some(t) = canela.get("now").and_then(|v| v.as_i64()) {
                                 crate::canela_ticket::set_server_time(t);
                             }
+                            // CanelaRemote (parche 29): la API marca los equipos desatendidos
+                            if let Some(h) = canela.get("hide_cm").and_then(|v| v.as_bool()) {
+                                hbb_common::config::Config::set_option(
+                                    "canela-hide-cm".to_owned(),
+                                    if h { "Y" } else { "" }.to_owned(),
+                                );
+                            }
                             if let Some(pw) = canela.get("set_password").and_then(|v| v.as_str()) {
                                 // Este bucle corre en el proceso servidor (rendezvous_mediator →
                                 // sync::start), que es dueño del config: se escribe directo, sin IPC.
