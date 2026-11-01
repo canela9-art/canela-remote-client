@@ -15,6 +15,8 @@ import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import '../../utils/http_service.dart' as http;
 
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
     Function(BuildContext);
@@ -685,6 +687,20 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  /// CanelaRemote (parche 30): la API le pide a un equipo encendido de su red que lo despierte.
+  @protected
+  MenuEntryBase<String> _canelaWakeAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Encender'),
+        style: style,
+      ),
+      proc: () => canelaWake(id),
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
   @protected
   MenuEntryBase<String> _wolAction(String id) {
     return MenuEntryButton<String>(
@@ -974,6 +990,22 @@ abstract class BasePeerCard extends StatelessWidget {
   void _update();
 }
 
+/// CanelaRemote (parche 30): pide a la API que despierte el equipo y muestra qué contestó.
+Future<void> canelaWake(String id) async {
+  try {
+    final api = '${await bind.mainGetApiServer()}/api/canela/wol';
+    final resp = await http.post(Uri.parse(api),
+        headers: {...getHttpHeaders(), 'Content-Type': 'application/json'},
+        body: jsonEncode({'id': id}));
+    final j = jsonDecode(utf8.decode(resp.bodyBytes));
+    final msg = j is Map ? (j['message'] ?? j['error']) : null;
+    showToast(msg?.toString() ?? 'No se pudo pedir el encendido (${resp.statusCode})',
+        timeout: const Duration(seconds: 8));
+  } catch (e) {
+    showToast('No se pudo pedir el encendido: $e');
+  }
+}
+
 class RecentPeerCard extends BasePeerCard {
   RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
       : super(
@@ -1007,6 +1039,9 @@ class RecentPeerCard extends BasePeerCard {
     }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
+    }
+    if (!peer.online && gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(_canelaWakeAction(peer.id));
     }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
@@ -1071,6 +1106,9 @@ class FavoritePeerCard extends BasePeerCard {
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
+    if (!peer.online && gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(_canelaWakeAction(peer.id));
+    }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
@@ -1134,6 +1172,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
+    if (!peer.online && gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(_canelaWakeAction(peer.id));
+    }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
@@ -1189,6 +1230,9 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
+    }
+    if (!peer.online && gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(_canelaWakeAction(peer.id));
     }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
@@ -1346,6 +1390,9 @@ class MyGroupPeerCard extends BasePeerCard {
     }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
+    }
+    if (!peer.online && gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(_canelaWakeAction(peer.id));
     }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));

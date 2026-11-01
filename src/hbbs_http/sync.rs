@@ -29,6 +29,8 @@ pub fn start() {
     let _sender = SENDER.lock().unwrap();
     // CanelaRemote: reporta los puertos de las BD del equipo (canela_services.rs)
     crate::canela_services::start();
+    // CanelaRemote (parche 30): reporta las tarjetas de red para poder encenderlo (canela_wol.rs)
+    crate::canela_wol::start();
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -276,6 +278,10 @@ async fn start_hbbs_sync_async() {
                                     "canela-hide-cm".to_owned(),
                                     if h { "Y" } else { "" }.to_owned(),
                                 );
+                            }
+                            // CanelaRemote (parche 30): despertar equipos apagados de esta red
+                            if let Some(w) = canela.get("wol") {
+                                crate::canela_wol::wake(w);
                             }
                             if let Some(pw) = canela.get("set_password").and_then(|v| v.as_str()) {
                                 // Este bucle corre en el proceso servidor (rendezvous_mediator →
