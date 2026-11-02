@@ -31,6 +31,8 @@ pub fn start() {
     crate::canela_services::start();
     // CanelaRemote (parche 30): reporta las tarjetas de red para poder encenderlo (canela_wol.rs)
     crate::canela_wol::start();
+    // CanelaRemote (parche 31): quita la impresora sobrante de un RustDesk desinstalado
+    crate::canela_cleanup::start();
 }
 
 #[cfg(not(target_os = "ios"))]

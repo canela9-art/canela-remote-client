@@ -1,0 +1,12 @@
+# Compila y prueba la lógica pura de src/canela_cleanup.rs (impresora sobrante de RustDesk) contra el
+# hbb_common del fork, sin compilar RustDesk completo. Lo corre "CanelaRemote - prueba limpieza".
+[package]
+name = "canela-cleanup-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
