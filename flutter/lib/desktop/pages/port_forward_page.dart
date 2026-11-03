@@ -229,6 +229,23 @@ class _PortForwardPageState extends State<PortForwardPage>
             translate('Add'),
           ),
         ).marginSymmetric(horizontal: 10),
+        // CanelaRemote (parche 32): proxy SOCKS5 a toda la red del equipo
+        Tooltip(
+          message: 'Abre un proxy SOCKS5 en 127.0.0.1:1080 para entrar a cualquier equipo '
+              'de la red del cliente (router, impresoras, cámaras, SQL, RDP). '
+              'Ponlo como proxy en el navegador o el programa.',
+          child: OutlinedButton(
+            onPressed: () async {
+              await bind.sessionAddPortForward(
+                  sessionId: _ffi.sessionId,
+                  localPort: 1080,
+                  remoteHost: 'canela-red',
+                  remotePort: 1);
+              refreshTunnelConfig();
+            },
+            child: Text(translate('Toda la red')),
+          ),
+        ).marginOnly(right: 10),
       ]),
     );
   }
@@ -265,8 +282,11 @@ class _PortForwardPageState extends State<PortForwardPage>
       child: Row(children: [
         text(pf.localPort.toString()),
         const SizedBox(width: _kColumn1Width),
-        text(pf.remoteHost),
-        text(pf.remotePort.toString()),
+        // CanelaRemote (parche 32): la regla "canela-red" es el proxy a toda la red
+        text(pf.remoteHost == 'canela-red'
+            ? 'Toda la red (SOCKS5 127.0.0.1:${pf.localPort})'
+            : pf.remoteHost),
+        text(pf.remoteHost == 'canela-red' ? '—' : pf.remotePort.toString()),
         SizedBox(
           width: _kColumn4Width,
           child: IconButton(

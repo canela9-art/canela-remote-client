@@ -56,6 +56,13 @@ pub async fn listen(
     let listener = tcp::new_listener(format!("127.0.0.1:{}", port), true).await?;
     let addr = listener.local_addr()?;
     log::info!("listening on port {:?}", addr);
+    // CanelaRemote (parche 32): "canela-red" = proxy SOCKS5 a toda la red por UNA sesión
+    if remote_host == crate::canela_socks::MARKER {
+        return canela_red_listen(
+            listener, id, password, interface, ui_receiver, key, token, lc, remote_host, remote_port,
+        )
+        .await;
+    }
     let is_rdp = port == 0;
     if is_rdp {
         run_rdp(addr.port());
@@ -202,6 +209,94 @@ async fn connect_and_login(
         allow_err!(stream.send_bytes(buffer.into()).await);
     }
     Ok(Some(stream))
+}
+
+/// CanelaRemote (parche 32): proxy SOCKS5 en el puerto local; todas sus conexiones van por una
+/// sola sesión (canela_socks.rs). Si la sesión se cae, se abre otra con la próxima conexión.
+async fn canela_red_listen(
+    listener: tokio::net::TcpListener,
+    id: String,
+    password: String,
+    interface: impl Interface,
+    mut ui_receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    remote_host: String,
+    remote_port: i32,
+) -> ResultType<()> {
+    let mut mux: Option<Arc<crate::canela_socks::MuxClient>> = None;
+    let mut keep = canela_red_connect(
+        &mut mux, &id, &password, &interface, &mut ui_receiver, key, token, &lc, &remote_host, remote_port,
+    )
+    .await;
+    while keep {
+        tokio::select! {
+            Ok((sock, addr)) = listener.accept() => {
+                log::debug!("canela-red: conexión SOCKS desde {:?}", addr);
+                if mux.as_ref().map(|m| m.is_closed()).unwrap_or(true) {
+                    keep = canela_red_connect(
+                        &mut mux, &id, &password, &interface, &mut ui_receiver, key, token, &lc,
+                        &remote_host, remote_port,
+                    )
+                    .await;
+                }
+                if let Some(m) = mux.as_ref().filter(|m| !m.is_closed()) {
+                    m.handle_socks(sock);
+                }
+            }
+            d = ui_receiver.recv() => {
+                if let Some(Data::Close) = d {
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Abre la sesión de CanelaRemote del proxy. Devuelve false si el técnico la canceló.
+async fn canela_red_connect(
+    mux: &mut Option<Arc<crate::canela_socks::MuxClient>>,
+    id: &str,
+    password: &str,
+    interface: &impl Interface,
+    ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
+    lc: &Arc<RwLock<LoginConfigHandler>>,
+    remote_host: &str,
+    remote_port: i32,
+) -> bool {
+    lc.write().unwrap().port_forward = (remote_host.to_owned(), remote_port);
+    let (near, far) = match crate::canela_socks::loopback_pair().await {
+        Ok(p) => p,
+        Err(err) => {
+            interface.on_establish_connection_error(err.to_string());
+            return true;
+        }
+    };
+    let mut forward = Framed::new(far, BytesCodec::new());
+    let mut close_port_forward = false;
+    match connect_and_login(id, password, ui_receiver, interface.clone(), &mut forward, key, token, false, &mut close_port_forward).await {
+        Ok(Some(stream)) => {
+            let interface = interface.clone();
+            tokio::spawn(async move {
+                if let Err(err) = run_forward(forward, stream).await {
+                    interface.msgbox("error", "Error", &err.to_string(), "");
+                }
+                log::info!("canela-red: sesión del proxy cerrada");
+            });
+            *mux = Some(crate::canela_socks::MuxClient::start(near));
+            true
+        }
+        _ if close_port_forward => false,
+        Err(err) => {
+            interface.on_establish_connection_error(err.to_string());
+            true
+        }
+        _ => true,
+    }
 }
 
 async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> ResultType<()> {

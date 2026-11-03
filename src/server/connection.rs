@@ -1578,6 +1578,21 @@ impl Connection {
         let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
         self.port_forward_address = addr.clone();
+        // CanelaRemote (parche 32): "canela-red" = el técnico entra a toda la red de este equipo;
+        // la sesión va a un multiplexor local que abre las conexiones (canela_socks.rs)
+        if pf.host == crate::canela_socks::MARKER {
+            return match crate::canela_socks::serve_local().await {
+                Ok(sock) => {
+                    self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));
+                    true
+                }
+                Err(e) => {
+                    self.send_login_error(format!("No se pudo abrir el acceso a la red: {e}"))
+                        .await;
+                    false
+                }
+            };
+        }
         match timeout(3000, TcpStream::connect(&addr)).await {
             Ok(Ok(sock)) => {
                 self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));

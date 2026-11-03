@@ -1,0 +1,13 @@
+# Compila y prueba los parsers de src/canela_socks.rs (acceso a toda la red) contra el
+# hbb_common del fork, sin compilar RustDesk completo. Lo corre "CanelaRemote - prueba acceso a la red".
+[package]
+name = "canela-socks-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
+
