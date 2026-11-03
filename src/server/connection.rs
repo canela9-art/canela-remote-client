@@ -1578,6 +1578,32 @@ impl Connection {
         let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
         self.port_forward_address = addr.clone();
+        // CanelaRemote (parche 33): "canela-cmd" = comandos, capturas y archivos del MCP del dueño;
+        // solo con "cmd": true en el ticket firmado (canela_cmd.rs)
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            if pf.host == crate::canela_cmd::MARKER {
+                let user = match crate::canela_cmd::allowed(&self.lr) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        log::warn!("canela-cmd negado a {}: {}", self.lr.my_id, e);
+                        self.send_login_error("No permission of port forward").await;
+                        return false;
+                    }
+                };
+                log::info!("canela-cmd: sesión de {} ({})", user, self.lr.my_id);
+                return match crate::canela_cmd::serve_local(user).await {
+                    Ok(sock) => {
+                        self.port_forward_socket = Some(Framed::new(sock, BytesCodec::new()));
+                        true
+                    }
+                    Err(e) => {
+                        self.send_login_error(format!("No se pudo abrir el canal: {e}")).await;
+                        false
+                    }
+                };
+            }
+        }
         // CanelaRemote (parche 32): "canela-red" = el técnico entra a toda la red de este equipo;
         // la sesión va a un multiplexor local que abre las conexiones (canela_socks.rs)
         if pf.host == crate::canela_socks::MARKER {

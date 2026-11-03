@@ -12,6 +12,7 @@
 //! Ticket = base64(firma ed25519 de 64 bytes ‖ JSON {"v":1,"to","from","u","iat","exp"}), el
 //! mismo formato "combined" que usa custom.txt. El vencimiento se mide con la hora de la API que
 //! llega en cada latido (parche 28), no con el reloj del equipo; el rechazo dice el motivo exacto.
+//! Si lo pide el superadmin, el JSON trae además `"cmd": true` (comandos del MCP, canela_cmd.rs).
 //!
 //! Clave fija: si el equipo tiene una guardada en el servidor, la API la manda junto al ticket
 //! (`password`) y `client.rs::handle_hash` la usa sin preguntar (parche 15). Vive solo en memoria
@@ -151,9 +152,25 @@ pub fn attach(lr: &mut LoginRequest, peer: &str) {
 /// Lado equipo: Ok si la conexión trae un ticket válido o si este equipo no exige tickets.
 /// El Err es el motivo que ve el técnico ("Conexión no autorizada: <motivo>"): dice qué arreglar.
 pub fn verify(lr: &LoginRequest) -> Result<(), String> {
+    if Config::get_option(OPTION_PK).is_empty() {
+        return Ok(());
+    }
+    let t = claims(lr)?;
+    log::info!(
+        "canela: conexión autorizada de {} ({})",
+        lr.my_id,
+        t.get("u").and_then(|v| v.as_str()).unwrap_or_default()
+    );
+    Ok(())
+}
+
+/// Lado equipo: el contenido del ticket, solo si es válido (firma, este equipo, ese técnico,
+/// vigente). Sin llave de tickets en este equipo no hay nada que verificar y es Err: lo usa
+/// canela_cmd.rs para el permiso `cmd`, que nunca se da sin ticket.
+pub fn claims(lr: &LoginRequest) -> Result<serde_json::Value, String> {
     let pk_b64 = Config::get_option(OPTION_PK);
     if pk_b64.is_empty() {
-        return Ok(());
+        return Err("este equipo no exige tickets".into());
     }
     let pk = crate::decode64(&pk_b64)
         .ok()
@@ -190,6 +207,5 @@ pub fn verify(lr: &LoginRequest) -> Result<(), String> {
     if exp + SKEW_SECS < trusted_now() {
         return Err(expired_reason(&t, exp));
     }
-    log::info!("canela: conexión autorizada de {} ({})", lr.my_id, s("u"));
-    Ok(())
+    Ok(t)
 }

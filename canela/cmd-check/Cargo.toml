@@ -1,0 +1,15 @@
+# Compila y prueba src/canela_cmd.rs (comandos y capturas del MCP del dueño) contra el hbb_common
+# del fork, sin compilar RustDesk completo. Lo corre "CanelaRemote - prueba comandos del dueño".
+[package]
+name = "canela-cmd-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
+serde_json = "1"
+lazy_static = "1"
+image = "=0.24.9"

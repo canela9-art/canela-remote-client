@@ -49,6 +49,10 @@ mod canela_sync;
 mod canela_wol;
 mod canela_cleanup;
 mod canela_socks;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod canela_cmd;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod canela_cmd_capture;
 mod canela_activity;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
