@@ -120,7 +120,7 @@ class PlatformFFI {
     final dylib = isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : isLinux
-            ? DynamicLibrary.open('librustdesk.so')
+            ? _canelaOpenLinuxCore()
             : isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
                 :
@@ -290,4 +290,18 @@ class PlatformFFI {
   }
 
   void setFullscreenCallback(void Function(bool) fun) {}
+}
+
+/// CanelaRemote (parche 34): en el paquete con marca la librería se llama como el ejecutable
+/// (canelaremote → lib/libcanelaremote.so). El runner ya la cargó con ese nombre y dlopen la
+/// reusa por nombre, aunque el archivo se haya reemplazado (actualización con la app abierta).
+DynamicLibrary _canelaOpenLinuxCore() {
+  final exe = Platform.resolvedExecutable.replaceFirst(RegExp(r' \(deleted\)$'), '');
+  final name = exe.substring(exe.lastIndexOf('/') + 1);
+  if (name.isNotEmpty && name != 'rustdesk') {
+    try {
+      return DynamicLibrary.open('lib$name.so');
+    } catch (_) {}
+  }
+  return DynamicLibrary.open('librustdesk.so');
 }

@@ -302,6 +302,9 @@ void runConnectionManagerScreen() async {
     await showCmWindow(isStartup: true);
   }
   setResizable(false);
+  // CanelaRemote (parche 34): en Linux el runner solo sabe el nombre del ejecutable; la ventana
+  // de aceptar la conexión lleva el nombre de la app
+  if (isLinux) windowManager.setTitle(bind.mainGetAppNameSync());
   // Start the uni links handler and redirect links to Native, not for Flutter.
   listenUniLinks(handleByFlutter: false);
 }

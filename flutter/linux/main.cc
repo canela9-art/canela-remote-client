@@ -2,15 +2,42 @@
 #include "my_application.h"
 
 #define RUSTDESK_LIB_PATH "librustdesk.so"
+// CanelaRemote (parche 34): el paquete con marca renombra el ejecutable (canelaremote) y su
+// librería (lib/libcanelaremote.so). Los nombres salen del ejecutable; si esa librería no
+// está junto a él, se usa la de upstream (el .deb genérico sigue igual).
+#include <limits.h>
+#include <unistd.h>
+#include <string>
+static std::string canela_exe_path() {
+  char buf[PATH_MAX] = {0};
+  ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  return n > 0 ? std::string(buf, n) : std::string();
+}
+std::string canela_exe_name() {
+  std::string path = canela_exe_path();
+  size_t slash = path.find_last_of('/');
+  std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
+  return name.empty() ? std::string("rustdesk") : name;
+}
+static std::string canela_core_lib() {
+  std::string path = canela_exe_path();
+  size_t slash = path.find_last_of('/');
+  if (slash != std::string::npos) {
+    std::string lib = "lib" + canela_exe_name() + ".so";
+    if (access((path.substr(0, slash) + "/lib/" + lib).c_str(), R_OK) == 0) return lib;
+  }
+  return RUSTDESK_LIB_PATH;
+}
 typedef bool (*RustDeskCoreMain)();
 bool gIsConnectionManager = false;
 
 void print_help_install_pkg(const char* so);
 
 bool flutter_rustdesk_core_main() {
-   void* librustdesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
+   const std::string core_lib = canela_core_lib();
+   void* librustdesk = dlopen(core_lib.c_str(), RTLD_LAZY);
    if (!librustdesk) {
-      fprintf(stderr,"Failed to load \"librustdesk.so\"\n");
+      fprintf(stderr,"Failed to load \"%s\"\n", core_lib.c_str());
       char* error;
       if ((error = dlerror()) != nullptr) {
         fprintf(stderr, "%s\n", error);

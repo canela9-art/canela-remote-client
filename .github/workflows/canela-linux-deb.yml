@@ -1,0 +1,96 @@
+# CanelaRemote — .deb de Linux con marca a partir del .deb genérico del MISMO run.
+# Lo llaman canela-build.yml (build completo, publica en el prerelease) y canela-linux.yml (solo
+# Linux, deja los .deb como artifact). El runner del genérico trae el parche 34; aquí se renombra a
+# canelaremote (paquete, ejecutable, servicio, /etc, lanzadores) con el custom.txt adentro
+# (canela/rebrand-linux.sh) y se prueba instalándolo en el runner.
+name: CanelaRemote - deb Linux
+
+on:
+  workflow_call:
+    inputs:
+      build:
+        description: "Número de build (va en la versión del paquete: <versión>.<build>)"
+        type: string
+        required: true
+      publish-tag:
+        description: "Prerelease donde subir los .deb; vacío = solo artifact"
+        type: string
+        default: ""
+
+jobs:
+  deb:
+    name: deb Linux (cliente y técnico)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: |
+            Cargo.toml
+            canela
+      # los .deb de ESTE run (artifacts de build-rustdesk-linux / build-linux), no los del release:
+      # si el job de Linux falló, el release todavía tiene los de un build anterior con otro número
+      - name: Bajar los .deb genéricos de este build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: rustdesk-*.deb
+          path: in
+          merge-multiple: true
+      - name: Rebrand
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          BUILD="${{ inputs.build }}"
+          mkdir -p out
+          debs=()
+          for f in in/rustdesk-"$VERSION"-x86_64.deb in/rustdesk-"$VERSION"-aarch64.deb; do
+            if [ -f "$f" ]; then debs+=("$f"); fi
+          done
+          [ ${#debs[@]} -gt 0 ] || { echo "✗ no hay .deb genérico de este build (¿falló el job de Linux?)"; exit 1; }
+          for deb in "${debs[@]}"; do
+            case "$deb" in *x86_64*) arch=x86_64;; *aarch64*) arch=aarch64;; *) continue;; esac
+            # paquetes canelaremote / canelaremote-tecnico: mismas rutas, se reemplazan uno al otro
+            VERSION="$VERSION.$BUILD" PACKAGE=canelaremote CONFLICTS=canelaremote-tecnico \
+              canela/rebrand-linux.sh "$deb" canela/custom-cliente.txt "out/canelaremote-$VERSION.$BUILD-$arch.deb"
+            VERSION="$VERSION.$BUILD" PACKAGE=canelaremote-tecnico CONFLICTS=canelaremote \
+              DISPLAY_NAME="CanelaRemote Técnico" ICON=canela/icon-tecnico-256.png \
+              canela/rebrand-linux.sh "$deb" canela/custom-tecnico.txt "out/canelaremote-tecnico-$VERSION.$BUILD-$arch.deb"
+          done
+          (cd out && sha256sum *.deb | tee SHA256SUMS)
+      - name: Prueba (instala el cliente x86_64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=$(ls out/canelaremote-[0-9]*-x86_64.deb)
+          if dpkg-deb -c "$deb" | grep -i rustdesk; then echo "✗ rutas con rustdesk"; exit 1; fi
+          if dpkg-deb -I "$deb" | grep -i rustdesk; then echo "✗ control con rustdesk"; exit 1; fi
+          # que la prueba no se registre en producción: el servidor de la config va a localhost
+          echo "127.0.0.1 remoto.ufpos.com" | sudo tee -a /etc/hosts
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "./$deb"
+          for _ in $(seq 1 20); do systemctl is-active --quiet canelaremote && break; sleep 1; done
+          systemctl status canelaremote --no-pager | head -5 || true
+          systemctl is-active canelaremote
+          id=$(sudo canelaremote --get-id | tail -1)
+          echo "ID: $id"
+          [[ "$id" =~ ^[0-9]{6,}$ ]] || { echo "✗ --get-id no devolvió un ID"; exit 1; }
+          # cambiar a técnico reemplaza al cliente (Conflicts/Replaces) y el servicio sigue
+          sudo apt-get install -y -qq "./$(ls out/canelaremote-tecnico-*-x86_64.deb)"
+          if dpkg -s canelaremote >/dev/null 2>&1; then echo "✗ el cliente sigue instalado junto al técnico"; exit 1; fi
+          for _ in $(seq 1 20); do systemctl is-active --quiet canelaremote && break; sleep 1; done
+          systemctl is-active canelaremote
+          sudo apt-get purge -y -qq canelaremote-tecnico
+      - name: Guardar como artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: canelaremote-linux-deb
+          path: |
+            out/canelaremote*.deb
+            out/SHA256SUMS
+      - name: Publicar
+        if: ${{ inputs.publish-tag != '' }}
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.publish-tag }}
+          files: out/canelaremote*.deb

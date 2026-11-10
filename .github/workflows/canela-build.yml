@@ -8,7 +8,9 @@
 #   · Android: job canela-android — mete custom.txt en el APK (parche 9 lo lee) y re-firma
 #     con la llave propia (secretos CANELA_ANDROID_KEYSTORE / _PASS).
 #   · Prueba: canela-windows-smoke abre los .exe x86_64 publicados y exige la ventana.
-#   · Linux: sigue genérico (rustdesk-*); se configura con `rustdesk --config`.
+#   · Linux:   job canela-linux — el .deb de ese mismo run (runner con el parche 34) pasa a
+#     canelaremote con la config adentro (canela/rebrand-linux.sh); se instala en el runner y
+#     exige el servicio activo y el ID por `canelaremote --get-id`.
 # Sin secretos de firma, Windows/macOS salen SIN firmar (sirven para pruebas internas).
 name: CanelaRemote build
 
@@ -94,6 +96,18 @@ jobs:
           tag_name: ${{ inputs.upload-tag }}
           files: out/canelaremote*.apk
 
+  # Linux: el .deb genérico de este run trae el runner con el parche 34; canela-linux-deb.yml lo
+  # renombra a canelaremote (paquete, ejecutable, servicio, /etc, lanzadores) con el custom.txt
+  # adentro, lo prueba instalándolo y lo publica aquí. Solo Linux, sin tocar lo demás: canela-linux.yml.
+  canela-linux:
+    name: CanelaRemote - deb Linux (cliente y técnico)
+    needs: build
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/canela-linux-deb.yml
+    with:
+      build: ${{ github.run_number }}
+      publish-tag: ${{ inputs.upload-tag }}
+
   # Abre los .exe de Windows ya publicados y falla si alguno no muestra la ventana.
   canela-windows-smoke:
     name: CanelaRemote - prueba Windows
@@ -107,7 +121,7 @@ jobs:
   # instaladas ven "Actualizar" (POST /api/canela/update lee canela-build.json del release).
   canela-release-info:
     name: CanelaRemote - publicar versión (actualización)
-    needs: [build, canela-macos, canela-android, canela-windows-smoke]
+    needs: [build, canela-macos, canela-android, canela-windows-smoke, canela-linux]
     if: ${{ !cancelled() && needs.canela-windows-smoke.result == 'success' && needs.canela-macos.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -128,9 +142,12 @@ jobs:
       - name: Borrar instaladores de builds anteriores
         env:
           GH_TOKEN: ${{ github.token }}
+          LINUX_OK: ${{ needs.canela-linux.result == 'success' }}
         run: |
-          # quedan solo los canelaremote-*.<este build>-*: así el panel y la actualización no ven dos
+          # quedan solo los canelaremote-*.<este build>-*: así el panel y la actualización no ven dos.
+          # Si canela-linux falló, los .deb del build anterior se quedan (son los únicos que hay).
           gh release view "${{ inputs.upload-tag }}" -R "${{ github.repository }}" --json assets --jq '.assets[].name' \
-            | grep '^canelaremote' | grep -v "\.${{ github.run_number }}-" | while read -r a; do
+            | grep '^canelaremote' | grep -v "\.${{ github.run_number }}-" \
+            | { if [ "$LINUX_OK" = true ]; then cat; else grep -v '\.deb$'; fi; } | while read -r a; do
                 echo "borrando $a"; gh release delete-asset "${{ inputs.upload-tag }}" "$a" -R "${{ github.repository }}" -y
               done
