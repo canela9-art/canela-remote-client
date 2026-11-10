@@ -790,6 +790,12 @@ fn force_stop_server() {
     sleep_millis(super::SERVICE_INTERVAL);
 }
 
+// CanelaRemote (parche 35): espera del ciclo de start_os_service mientras la sesión no cambia
+// (upstream: 500 ms). Cada vuelta lanza loginctl, pgrep y ps; en el kiosco de ufPOS (una sesión
+// fija de startx) eso eran ~7 procesos por segundo y 13 s de CPU por minuto. Detectar una sesión
+// nueva tarda hasta 3 s más; cuando cambia, el ciclo vuelve a SERVICE_INTERVAL.
+const CANELA_SERVICE_IDLE_INTERVAL: u64 = 3_000;
+
 pub fn start_os_service() {
     check_if_stop_service();
     stop_rustdesk_servers();
@@ -872,7 +878,7 @@ pub fn start_os_service() {
         let keeps_session = sid == desktop.sid;
         if keeps_headless || keeps_session {
             // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
-            sleep_millis(500);
+            sleep_millis(CANELA_SERVICE_IDLE_INTERVAL);
         } else {
             sleep_millis(super::SERVICE_INTERVAL);
         }
